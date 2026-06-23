@@ -1,0 +1,62 @@
+"""Streamlit UI: 기업별 구비서류(zip) 업로드 → 적합 판정 → 리포트 다운로드.
+실행:  streamlit run cluster_screening/app.py
+"""
+import os, tempfile
+from datetime import date
+import streamlit as st
+from cluster_screening import pipeline, config
+from cluster_screening.pipeline import rules_engine, report
+
+st.set_page_config(page_title="입주기업 서류적합 검토", layout="wide")
+st.title("창업·벤처 녹색융합클러스터 — 신청서류 적합 검토")
+
+with st.sidebar:
+    st.header("설정")
+    company = st.text_input("기업명", "")
+    apply_d = st.date_input("입주신청일", value=date.today())
+    pw = st.text_input("구비서류 zip 비밀번호(있으면)", type="password",
+                       value=config.ZIP_PASSWORD)
+    st.caption(f"OCR: {'ON' if config.ENABLE_OCR else 'OFF'} · "
+               f"LLM: {'ON('+config.LLM_MODEL+')' if config.ENABLE_LLM else 'OFF'}")
+
+up = st.file_uploader("구비서류 업로드 (zip 또는 PDF 다중)",
+                      type=["zip", "pdf"], accept_multiple_files=True)
+
+if st.button("검토 실행", type="primary", disabled=not up):
+    work = tempfile.mkdtemp(prefix="cluster_ui_")
+    paths = []
+    for f in up:
+        p = os.path.join(work, f.name)
+        with open(p, "wb") as out:
+            out.write(f.getbuffer())
+        paths.append(p)
+    src = work if len(paths) > 1 or paths[0].endswith(".pdf") else paths[0]
+
+    bar = st.progress(0.0, "분석 중…")
+    def prog(i, n, fn):
+        bar.progress((i + 1) / max(n, 1), f"[{i+1}/{n}] {fn}")
+    record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw, progress=prog)
+    judgment = rules_engine.evaluate(record, rules)
+    bar.empty()
+
+    color = {"적합": "green", "부적합": "red", "확인필요": "orange"}.get(judgment["overall"], "gray")
+    st.markdown(f"## 종합판정: :{color}[{judgment['overall']}]  ·  가점(잠정) {judgment['bonus_total']}점")
+
+    st.subheader("판단기준별 결과")
+    st.dataframe([{"구분": r["section"], "판단기준": r["name"], "판정": r["status"],
+                   "근거/세부": r["detail"], "evidence": r["evidence"]}
+                  for r in judgment["results"]], use_container_width=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.subheader("가점 증빙")
+        st.dataframe(judgment["bonus"], use_container_width=True)
+    with c2:
+        st.subheader("서류 처리내역")
+        st.dataframe(record["doc_log"], use_container_width=True)
+
+    out = os.path.join(work, f"판정결과_{company or '기업'}.xlsx")
+    report.build_report(company or "(미지정)", record, judgment, out)
+    with open(out, "rb") as f:
+        st.download_button("판정 리포트(xlsx) 다운로드", f, file_name=os.path.basename(out),
+                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

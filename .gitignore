@@ -1,0 +1,16 @@
+# 비밀값
+.env
+
+# Claude Code 로컬 설정(개인 권한·경로) — 모든 깊이
+**/.claude/settings.local.json
+.claude/
+
+# 파이썬
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 산출물/임시
+*.xlsx
+*.log
