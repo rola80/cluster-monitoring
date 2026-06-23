@@ -36,6 +36,11 @@ uv run python -m cluster_screening.auth delete <아이디>
 
 uv run streamlit run src/cluster_screening/app.py      # UI
 uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw 260529 --out 결과.xlsx
+
+# (A) 근거 문서 RAG — 무거운 의존성이라 extra로 분리
+uv sync --extra rag
+uv run rag-index                          # data/reference/*.pdf 인덱싱 → chroma/
+uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 ```
 
 샘플 zip 비밀번호 `260529`. 자동 테스트 스위트는 아직 없다 — 검증은 실제 서류로 CLI 실행 후 `종합판정` 확인.
@@ -86,11 +91,14 @@ uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --
 
 성격이 다른 **두 갈래**로 구성된다.
 
-### (A) 근거 문서 RAG — `rag/`  🔴 미구현(예정)
+### (A) 근거 문서 RAG — `src/cluster_screening/rag/`  🟡 검색 MVP 구현(통합 예정)
 공고·규정·지침을 인덱싱해 "이 판정의 근거 조항이 무엇인가"를 검색한다(NotebookLM처럼 Source 기반).
 ```
-근거 문서(PDF) → ingestion(적재·진단) → chunking → index(Vector DB) → retriever(근거 검색)
+근거 문서(PDF) → ingestion(적재·진단) → chunking(+metadata 6항목, 제N조 태깅) → index(임베딩·Chroma) → retriever(근거 검색)
 ```
+임베딩=오프라인 sentence-transformers(`RAG_EMBED_MODEL`, 기본 ko-sroberta), 벡터스토어=로컬 Chroma(`chroma/`).
+무거운 의존성이라 `uv sync --extra rag`로 분리. 콘솔: `uv run rag-index` / `uv run rag-search "<질의>"`.
+근거 PDF는 `data/reference/`에 둔다(git 비추적).
 
 ### (B) 신청 서류 검토 파이프라인 — `src/cluster_screening/pipeline/`  ✅ 구현됨
 ```
@@ -140,8 +148,9 @@ uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --
     config.py          설정 토글(OCR·LLM·zip비번; .env/환경변수)
     rules.yaml         판단기준 규칙표
     pipeline/          (B) 신청 서류 검토 파이프라인 (위 6모듈)
-  rag/        🔴 (A) 근거 문서 RAG — ingestion·chunking·index·retriever (예정)
-  data/       🔴 입력/샘플(신청 서류·근거 PDF) (예정)
+    rag/        🟡 (A) 근거 문서 RAG — ingestion·chunking·index·retriever·cli (검색 MVP)
+  data/reference/  🔴 근거 PDF(공고·규정·지침) 투입 위치 (git 비추적)
+  chroma/     🟡 RAG 벡터 인덱스(로컬 영속, git 비추적)
   outputs/    🔴 판정 리포트 결과물(xlsx) (예정)
   eval/       🔴 회귀 테스트 정답셋(검증용 기업 데이터) (예정)
 ```

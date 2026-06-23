@@ -15,9 +15,10 @@ venv/
 build/
 dist/
 
-# 산출물 폴더(예정)
+# 산출물·인덱스·입력데이터
 outputs/
 chroma/
+data/          # 신청서류(PII)·근거 PDF 등 외부 입력은 커밋하지 않음
 
 # 산출물/임시
 *.xlsx

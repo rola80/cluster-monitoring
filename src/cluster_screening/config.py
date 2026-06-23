@@ -33,3 +33,13 @@ LLM_MODEL_VISION = os.getenv("LLM_MODEL_VISION", "gpt-4.1")  # 스캔 OCR 폴백
 # ── 추출 임계값 ──
 TEXT_LAYER_MIN_CHARS = 40   # 페이지당 이 미만이면 스캔으로 간주 → OCR 경로
 ZIP_PASSWORD = os.getenv("ZIP_PASSWORD", "")  # 구비서류 zip 비밀번호(있으면)
+
+# ── RAG (근거 문서: 공고·운영규정·관리지침) ──
+# 임베딩은 오프라인(sentence-transformers), 벡터스토어는 로컬 Chroma. 'uv sync --extra rag' 필요.
+RAG_REFERENCE_DIR = os.getenv("RAG_REFERENCE_DIR", str(PROJECT_ROOT / "data" / "reference"))
+RAG_PERSIST_DIR = os.getenv("RAG_PERSIST_DIR", str(PROJECT_ROOT / "chroma"))
+RAG_COLLECTION = os.getenv("RAG_COLLECTION", "reference")
+RAG_EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "jhgan/ko-sroberta-multitask")  # 한국어 경량(오프라인)
+RAG_CHUNK_CHARS = int(os.getenv("RAG_CHUNK_CHARS", "800"))
+RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
+RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))

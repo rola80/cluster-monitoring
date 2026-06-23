@@ -89,6 +89,16 @@ uv run cluster-screening <폴더|zip|pdf> --name 기업명 --apply 2026-03-16 --
 # 또는:  uv run python -m cluster_screening.cli <경로> ...
 ```
 
+### 근거 문서 RAG (선택)
+공고·운영규정·관리지침에서 "이 판정의 근거 조항"을 검색한다. 임베딩은 **오프라인**(sentence-transformers),
+벡터스토어는 **로컬 Chroma**. 무거운 의존성이라 별도 extra로 설치한다.
+```bash
+uv sync --extra rag
+# 근거 PDF를 data/reference/ 에 넣은 뒤:
+uv run rag-index                              # 인덱싱 → chroma/ (최초 1회 임베딩 모델 다운로드)
+uv run rag-search "창업 7년 기준이 무엇인가"      # 근거 조항 top-k 검색(문서·페이지·제N조)
+```
+
 ## 3. 환경설정 (환경변수)
 
 환경변수는 프로젝트 루트의 `.env`(있으면 자동 로드)로 관리한다. `.env.example`을 복사해 채운다.

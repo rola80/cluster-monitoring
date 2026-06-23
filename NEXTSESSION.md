@@ -30,15 +30,17 @@
 - [ ] PII(주민번호·사업자번호) 마스킹·암호화 저장(Presidio + cryptography). 결과 xlsx·임시파일 원문 잔존 제거.
 - [ ] 처리 후 임시 디렉터리(`tempfile.mkdtemp`) 정리 루틴.
 
-## 3. (A) 근거 문서 RAG 브랜치 🟣 — **가장 큰 미비 단계**
+## 3. (A) 근거 문서 RAG 브랜치 🟣
 
-> 현재 파이프라인(B)만 존재. 판정의 "근거 조항" 검색이 빠져 있음. 빌드 전 설계·도구 선택 승인 필요.
-- [ ] **설계 승인**: Vector DB(예: Chroma) / 임베딩 제공자(오프라인 vs OpenAI) 결정 — 오프라인 우선 정책과 정합.
-- [ ] `rag/ingestion.py` — 공고·규정·지침 PDF 적재·진단.
-- [ ] `rag/chunking.py` — 청킹(+ metadata 6항목 부여).
-- [ ] `rag/index.py` — Vector DB 인덱스 구축.
-- [ ] `rag/retriever.py` — 근거 조항 검색.
-- [ ] **통합**: `rules_engine`가 판정 시 근거 조항을 retrieve해 evidence에 (서류 위치 + 근거 조항) 동시 기록.
+> 검색 MVP 완료. 임베딩=오프라인 sentence-transformers(ko-sroberta), 벡터스토어=로컬 Chroma. `uv sync --extra rag`.
+- ~~**설계 승인**: 오프라인 임베딩 + 로컬 Chroma 확정~~
+- ~~`rag/ingestion.py` — 공고·규정·지침 PDF 페이지 단위 적재·진단(warning)~~
+- ~~`rag/chunking.py` — 청킹 + metadata 6항목 + '제N조' article 태깅~~
+- ~~`rag/index.py` — 임베딩 → Chroma 인덱스 구축(텔레메트리 OFF)~~
+- ~~`rag/retriever.py` + `rag/cli.py` — 근거 조항 top-k 검색, `rag-index`/`rag-search` 콘솔~~ → 합성 데이터 검증(제9조 검색 성공)
+- [ ] **실데이터 인덱싱**: `data/reference/`에 실제 공고·규정·지침 PDF 투입 후 `rag-index` 검증.
+- [ ] **스캔 근거문서 OCR**: 현재 ingestion은 텍스트레이어만(스캔이면 warning). 필요 시 OCR 경로 연결.
+- [ ] **(B)와 통합**: `rules_engine`가 판정 시 `retriever.evidence_for`로 근거 조항을 evidence에 동시 기록.
 
 ## 3b. 성과 년도별 정리 — 정밀 추출 (후속) 🟡
 
