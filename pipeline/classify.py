@@ -35,9 +35,11 @@ FILENAME_HINTS = {
 def classify(filename, text):
     name = os.path.basename(filename)
     text_head = (text or "")[:4000]
+    # OCR/정부양식은 글자 사이 공백이 흔함("사 업 자 등 록 증") → 공백 제거 후 매칭
+    text_ns = re.sub(r"\s+", "", text_head)
     scores = {}
     for typ, kws in DOC_KEYWORDS.items():
-        s = sum(2 for kw in kws if kw in text_head)
+        s = sum(2 for kw in kws if kw.replace(" ", "") in text_ns)
         for kw in FILENAME_HINTS.get(typ, []):
             if kw in name:
                 s += 20  # 파일명 일치는 결정적 신호(본문 내 타서류 단어 혼입을 압도)

@@ -1,6 +1,7 @@
 streamlit>=1.36
 pdfplumber>=0.11
 PyMuPDF>=1.24
+easyocr>=1.7
 pytesseract>=0.3.10
 pdf2image>=1.17
 openai>=1.40
@@ -11,3 +12,5 @@ rapidfuzz>=3.0
 pyzipper>=0.3.6
 Pillow>=10.0
 python-dotenv>=1.0
+# (선택) 표/레이아웃 복원이 필요할 때만. 무겁고 RAM 큼 → USE_DOCLING=1 일 때:
+# docling>=2.105

@@ -11,11 +11,18 @@ except ImportError:
     pass
 
 # ── OCR ──
-# 스캔 PDF(텍스트 레이어 없음) 처리. 한글 인식엔 tesseract 'kor' 언어팩 필요.
-#   설치:  apt-get install tesseract-ocr tesseract-ocr-kor  (또는 PaddleOCR/Surya 사용)
+# 스캔 PDF(텍스트 레이어 없음) 처리.
+# 기본 엔진은 EasyOCR(한글 내장, CPU, 최초 1회 모델 다운로드 후 오프라인).
+#   - PaddleOCR 정식은 Python 3.14 휠이 없어 사용 불가, RapidOCR은 한글 모델 미제공 → EasyOCR 채택.
 ENABLE_OCR = os.getenv("ENABLE_OCR", "1") == "1"
-OCR_LANG = os.getenv("OCR_LANG", "kor+eng")
+OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr")          # easyocr | tesseract
+OCR_LANGS = os.getenv("OCR_LANGS", "ko,en").split(",")   # EasyOCR 언어코드(쉼표구분)
+OCR_LANG = os.getenv("OCR_LANG", "kor+eng")              # tesseract 폴백용(kor 언어팩 필요)
 OCR_DPI = int(os.getenv("OCR_DPI", "300"))
+
+# ── Docling(선택) ── 표/레이아웃 복원이 필요할 때만. 느리고 RAM이 커서 기본 OFF.
+USE_DOCLING = os.getenv("USE_DOCLING", "0") == "1"
+DOCLING_TABLES = os.getenv("DOCLING_TABLES", "0") == "1"  # TableFormer(표구조) — 가장 무거움
 
 # ── LLM (OpenAI) ── 비정형/OCR보정 필드 추출 폴백. 키 없으면 자동 비활성.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
