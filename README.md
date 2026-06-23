@@ -6,23 +6,79 @@
 판정 흐름: `구비서류 → (중첩 zip 해제) → 서류 분류 → 하이브리드 텍스트 추출(텍스트레이어/OCR)
 → 필드 추출 → 룰엔진 판정 → 리포트`
 
+## 서비스 흐름도
+
+```mermaid
+flowchart TD
+    U([사용자]) --> LOGIN{로그인 인증<br/>auth.py}
+    LOGIN -- 실패 --> LOGIN
+    LOGIN -- 성공 --> UP[/구비서류 업로드<br/>zip · 폴더 · PDF 다중/]
+    UP --> ENTRY{진입점}
+    ENTRY -->|Streamlit UI| APP[app.py]
+    ENTRY -->|CLI| CLI[cli.py]
+    APP --> PROC
+    CLI --> PROC
+
+    subgraph PIPE["pipeline.process_company — 서류별 반복"]
+        PROC[수집 ingest.py<br/>중첩 zip 해제·PDF 수집] --> LOOP{{서류별 루프}}
+        LOOP --> EXTRACT[텍스트 추출 extract_text.py]
+        EXTRACT --> HASTEXT{텍스트 레이어<br/>40자/페이지 이상?}
+        HASTEXT -->|예| TXT[pdfplumber 텍스트]
+        HASTEXT -->|아니오 · 스캔| OCR[OCR<br/>EasyOCR → tesseract 폴백]
+        TXT --> CLS
+        OCR --> CLS
+        CLS[서류 분류 classify.py<br/>파일명 힌트 가중치 20 > 본문] --> FLD[필드 추출 extract_fields.py<br/>앵커·정규식 + LLM 폴백]
+        FLD --> LOOP
+    end
+
+    LOOP -->|완료| REC[(record<br/>docs · apply_date · doc_log)]
+    REC --> RULES[룰엔진 판정 rules_engine.py<br/>rules.yaml의 check_* 1:1 실행]
+    RULES --> JUDGE{종합판정}
+    JUDGE --> A[적합]
+    JUDGE --> B[부적합]
+    JUDGE --> C[확인필요]
+    A --> REP
+    B --> REP
+    C --> REP
+    REP[리포트 생성 report.py<br/>xlsx 4시트] --> DL[/판정 리포트 다운로드/]
+```
+
+판정값은 **적합 / 부적합 / 확인필요 / 해당없음**이며, 하나라도 `부적합`이면 종합 `부적합`,
+없으면 `확인필요`가 하나라도 있으면 `확인필요`, 모두 통과 시 `적합`. 모든 결과에 근거(evidence)가 기록된다.
+
 ## 1. 설치
 
 ```bash
 pip install -r requirements.txt
+```
 
-# 스캔 PDF용 한글 OCR (선택, 강력 권장)
-#  Ubuntu:  sudo apt-get install tesseract-ocr tesseract-ocr-kor poppler-utils
-#  macOS :  brew install tesseract tesseract-lang poppler
+스캔 PDF용 한글 OCR은 **EasyOCR**가 기본 엔진이다(`requirements.txt`에 포함, 한글·영어 내장,
+CPU 동작, 최초 1회 모델 자동 다운로드 후 오프라인). 별도 설치는 필요 없다.
+
+PDF 래스터화에 `poppler`가 있으면 더 안정적이며, 없으면 PyMuPDF로 폴백한다(선택).
+tesseract는 EasyOCR 미설치 시의 폴백일 뿐 기본 경로가 아니다.
+```bash
+#  (선택) tesseract 폴백 사용 시 — Ubuntu:  sudo apt-get install tesseract-ocr tesseract-ocr-kor poppler-utils
+#                                  macOS :  brew install tesseract tesseract-lang poppler
 ```
 
 ## 2. 실행
+
+### 로그인 계정 만들기 (UI 최초 1회 필수)
+Streamlit UI는 로그인 게이트로 보호된다. 등록된 사용자가 없으면 진입할 수 없으니 먼저 계정을 만든다.
+```bash
+python -m cluster_screening.auth add <아이디>        # 비밀번호는 안전 입력(가림)
+python -m cluster_screening.auth list                # 계정 목록
+python -m cluster_screening.auth delete <아이디>     # 계정 삭제
+```
+비밀번호는 평문 저장하지 않고 PBKDF2-HMAC-SHA256 해시로 `users.json`에 저장된다(`users.json`은 git 비추적).
+CLI(`cluster_screening.cli`)는 로그인 없이 동작한다.
 
 ### Streamlit UI
 ```bash
 streamlit run cluster_screening/app.py
 ```
-사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
+로그인 후 사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
 
 ### CLI
 ```bash
@@ -31,15 +87,21 @@ python -m cluster_screening.cli <폴더|zip|pdf> --name 기업명 --apply 2026-0
 
 ## 3. 환경설정 (환경변수)
 
+환경변수는 프로젝트 루트의 `.env`(있으면 자동 로드)로 관리한다. `.env.example`을 복사해 채운다.
+**`.env`와 `users.json`은 비밀이므로 git에 올리지 않는다(.gitignore에 등록됨).**
+
 | 변수 | 기본값 | 설명 |
 |---|---|---|
 | `ENABLE_OCR` | `1` | 스캔 PDF OCR 사용 여부 |
-| `OCR_LANG` | `kor+eng` | tesseract 언어 |
+| `OCR_ENGINE` | `easyocr` | OCR 엔진 — `easyocr`(기본·한글 내장) 또는 `tesseract`(폴백) |
+| `OCR_LANGS` | `ko,en` | EasyOCR 언어코드(쉼표 구분) |
+| `OCR_LANG` | `kor+eng` | tesseract 폴백용 언어(`kor` 언어팩 필요) |
 | `OCR_DPI` | `300` | 래스터화 해상도 |
-| `OPENAI_API_KEY` | (없음) | 설정 시 LLM 필드추출 폴백 활성 |
+| `USE_DOCLING` | `0` | 표/레이아웃 복원(무겁고 RAM 큼, 선택) |
+| `OPENAI_API_KEY` | (없음) | 설정 시 LLM 필드추출 폴백 자동 활성 |
 | `LLM_MODEL` | `gpt-4.1-mini` | 텍스트 필드추출 워크호스 |
 | `LLM_MODEL_VISION` | `gpt-4.1` | 스캔 OCR 비전 폴백 |
-| `ZIP_PASSWORD` | (없음) | 구비서류 zip 비밀번호 |
+| `ZIP_PASSWORD` | (없음) | 구비서류 zip 기본 비밀번호 |
 
 OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로 처리, 스캔본은 `확인필요`로 표시).
 
@@ -69,9 +131,10 @@ OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로
 ## 6. 구조
 ```
 cluster_screening/
-  app.py            Streamlit UI
+  app.py            Streamlit UI (로그인 게이트 포함)
   cli.py            CLI 실행기
-  config.py         설정/토글
+  auth.py           로그인 인증(PBKDF2 해시·users.json) + 계정 관리 CLI
+  config.py         설정/토글(OCR·LLM·zip비번; .env/환경변수로 제어)
   rules.yaml        판단기준(규칙표)
   pipeline/
     ingest.py        (중첩) zip 해제·PDF 수집

@@ -4,10 +4,16 @@
 import os, tempfile
 from datetime import date
 import streamlit as st
-from cluster_screening import pipeline, config
+from cluster_screening import pipeline, config, auth
 from cluster_screening.pipeline import rules_engine, report
 
 st.set_page_config(page_title="입주기업 서류적합 검토", layout="wide")
+
+# ── 로그인 게이트 ── (미로그인 시 로그인 폼만 표시하고 앱 본문은 차단)
+if not auth.streamlit_login_gate():
+    st.stop()
+auth.streamlit_logout_button()
+
 st.title("창업·벤처 녹색융합클러스터 — 신청서류 적합 검토")
 
 with st.sidebar:
