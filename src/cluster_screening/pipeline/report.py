@@ -41,14 +41,15 @@ def build_report(company_name, record, judgment, out_path):
 
     # 2) 판단기준별 결과
     ws2 = wb.create_sheet("판단기준별 결과")
-    ws2.append(["구분", "ID", "판단기준", "판정", "근거/세부", "비고(evidence)"])
+    ws2.append(["구분", "ID", "판단기준", "판정", "근거/세부", "비고(evidence)", "근거조항(규정·RAG)"])
     for r in judgment["results"]:
-        ws2.append([r["section"], r["id"], r["name"], r["status"], r["detail"], r["evidence"]])
-    _style(ws2, 6)
+        ws2.append([r["section"], r["id"], r["name"], r["status"], r["detail"],
+                    r["evidence"], r.get("basis", "")])
+    _style(ws2, 7)
     for r in range(2, ws2.max_row + 1):
         st = ws2.cell(r, 4).value
         ws2.cell(r, 4).fill = PatternFill("solid", fgColor=COLORS.get(st, "FFFFFF"))
-    for col, w in zip("ABCDEF", [20, 6, 22, 10, 45, 40]):
+    for col, w in zip("ABCDEFG", [20, 6, 22, 10, 45, 34, 30]):
         ws2.column_dimensions[col].width = w
 
     # 3) 가점 증빙

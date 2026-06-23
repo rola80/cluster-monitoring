@@ -50,7 +50,8 @@ if st.button("검토 실행", type="primary", disabled=not up):
 
     st.subheader("판단기준별 결과")
     st.dataframe([{"구분": r["section"], "판단기준": r["name"], "판정": r["status"],
-                   "근거/세부": r["detail"], "evidence": r["evidence"]}
+                   "근거/세부": r["detail"], "evidence": r["evidence"],
+                   "근거조항(규정·RAG)": r.get("basis", "")}
                   for r in judgment["results"]], use_container_width=True)
 
     c1, c2 = st.columns(2)

@@ -107,9 +107,11 @@ uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 ```
 오케스트레이터는 `pipeline/__init__.py`의 `process_company()`. `app.py`(UI)·`cli.py`는 얇은 진입점.
 
-### 두 갈래가 만나는 지점  🔴 통합 예정
-`rules_engine`가 신청 서류에서 추출한 필드를 **근거 RAG에서 검색한 조항**과 대조하여 판정한다.
-→ evidence에 **신청 서류 위치**와 **근거 조항**이 함께 들어간다. (현재는 신청 서류 evidence만 존재.)
+### 두 갈래가 만나는 지점  🟡 1차 통합됨
+`rules_engine.evaluate()`가 각 criterion의 `basis` 질의로 `retriever.evidence_for()`를 호출해
+**근거 조항**을 `result["basis"]`에 첨부한다(리포트·UI·CLI "근거조항" 컬럼). `ENABLE_RAG_BASIS`로 토글,
+`RAG_MIN_SCORE`(기본 0.3) 미만은 노이즈로 보고 미첨부. rag 미설치/인덱스 없음이면 자동 무첨부(판정 불변).
+ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra unstructured`)로 unstructured 사용.
 
 ### 판단기준 ↔ 코드 (가장 중요한 규약)
 `rules.yaml`의 각 criterion `check` 값은 `rules_engine.py`의 **동명 함수와 1:1**(`CHECKS` 디스패치).

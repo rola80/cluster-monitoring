@@ -27,6 +27,8 @@ def main():
         print(f"  [{r['status']:>4}] {r['id']} {r['name']}: {r['detail']}")
         if r["evidence"]:
             print(f"          근거: {r['evidence']}")
+        if r.get("basis"):
+            print(f"          근거조항: {r['basis']}")
     print("\n--- 성과 년도별 정리 (연도별 정밀수치는 사람 확인) ---")
     for p in judgment["performance"]:
         print(f"  [{p['상태']:>4}] {p['지표']}({p['단위']}): {p['집계값'] or '-'} · 근거={p['근거서류']}")

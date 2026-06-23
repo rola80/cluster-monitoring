@@ -181,13 +181,27 @@ def evaluate_performance(record, rules):
     return rows
 
 
+def _basis_lookup(query):
+    """(A) RAG에서 판정 근거 조항을 찾아 evidence에 첨부.
+    rag 미설치/인덱스 없음/오류 시 조용히 '' 반환(우아한 degradation — 파이프라인은 그대로 동작)."""
+    from .. import config
+    if not getattr(config, "ENABLE_RAG_BASIS", False) or not query:
+        return ""
+    try:
+        from ..rag import retriever
+        return retriever.evidence_for(query)
+    except Exception:
+        return ""
+
+
 def evaluate(record, rules):
     results = []
     for c in rules["criteria"]:
         fn = CHECKS.get(c["check"])
         res = fn(record, rules) if fn else R("확인필요", "미구현 check", c["check"])
+        basis = _basis_lookup(c.get("basis") or f'{c["name"]} {c.get("detail", "")}')
         results.append({"id": c["id"], "section": c["section"], "name": c["name"],
-                        **res})
+                        "basis": basis, **res})
     bonus_rows, bonus_total = evaluate_bonus(record, rules)
     performance = evaluate_performance(record, rules)  # 성과표(종합판정에는 영향 없음)
 

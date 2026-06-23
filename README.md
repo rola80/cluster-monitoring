@@ -98,6 +98,9 @@ uv sync --extra rag
 uv run rag-index                              # 인덱싱 → chroma/ (최초 1회 임베딩 모델 다운로드)
 uv run rag-search "창업 7년 기준이 무엇인가"      # 근거 조항 top-k 검색(문서·페이지·제N조)
 ```
+인덱싱하면 판정 시 각 기준의 **근거 조항이 리포트·UI의 "근거조항" 칸에 자동 첨부**된다
+(`ENABLE_RAG_BASIS`, 노이즈 필터 `RAG_MIN_SCORE`; rag 미설치 시 무첨부). 근거 PDF 파서는 기본 pdfplumber이며,
+`USE_UNSTRUCTURED=1`(+`uv sync --extra unstructured`)로 **unstructured** 레이아웃 파서를 쓸 수 있다(실패 시 자동 폴백).
 
 ## 3. 환경설정 (환경변수)
 

@@ -38,9 +38,11 @@
 - ~~`rag/chunking.py` — 청킹 + metadata 6항목 + '제N조' article 태깅~~
 - ~~`rag/index.py` — 임베딩 → Chroma 인덱스 구축(텔레메트리 OFF)~~
 - ~~`rag/retriever.py` + `rag/cli.py` — 근거 조항 top-k 검색, `rag-index`/`rag-search` 콘솔~~ → 합성 데이터 검증(제9조 검색 성공)
-- [ ] **실데이터 인덱싱**: `data/reference/`에 실제 공고·규정·지침 PDF 투입 후 `rag-index` 검증.
-- [ ] **스캔 근거문서 OCR**: 현재 ingestion은 텍스트레이어만(스캔이면 warning). 필요 시 OCR 경로 연결.
-- [ ] **(B)와 통합**: `rules_engine`가 판정 시 `retriever.evidence_for`로 근거 조항을 evidence에 동시 기록.
+- ~~**(B)와 통합**: `rules_engine`가 판정 시 `retriever.evidence_for`로 각 기준의 근거 조항을 evidence에 첨부~~ → rules.yaml `basis` 질의 + `ENABLE_RAG_BASIS`/`RAG_MIN_SCORE`(노이즈 필터), 리포트·UI·CLI에 "근거조항" 노출, RAG OFF 시 우아한 degradation 검증
+- ~~**unstructured 파싱 백엔드**: `USE_UNSTRUCTURED`로 ingestion에서 unstructured 사용(미설치/실패 시 pdfplumber 폴백). `uv sync --extra unstructured`~~
+- [ ] **실데이터 인덱싱**: `data/reference/`에 실제 공고·규정·지침 PDF 투입 후 `rag-index` 검증(임계값 RAG_MIN_SCORE 튜닝).
+- [ ] **스캔 근거문서 OCR**: 현재 ingestion은 텍스트레이어만(스캔이면 warning). 필요 시 OCR/unstructured hi_res 연결.
+- [ ] (선택) unstructured를 (B) 신청서류 `extract_text`에도 백엔드로 확장.
 
 ## 3b. 성과 년도별 정리 — 정밀 추출 (후속) 🟡
 

@@ -27,12 +27,14 @@ criteria:
     check: check_business_age
     docs: [사업자등록증, 법인등기부등본, 입주신청서]
     detail: "입주신청일 기준 창업하여 사업을 개시한 날이 7년 미경과(법인: 회사성립연월일 / 개인: 개업연월일)"
+    basis: "창업 7년 이내 중소기업 입주 대상 기업의 범위"
   - id: T2
     section: "1. 대상 기업의 범위"
     name: 벤처기업 자격(해당 시)
     check: check_venture
     docs: [벤처기업확인서]
     detail: "「벤처기업육성에 관한 특별조치법」 제2조의2 요건(벤처기업확인서 유효)"
+    basis: "벤처기업 자격 요건 벤처기업확인서"
 
   # ── 2. 제외 기업의 범위 ──
   - id: E3
@@ -41,12 +43,14 @@ criteria:
     check: check_tax_arrears
     docs: [국세지방세납세증명서]
     detail: "납세증명서상 체납액 없음 및 유효기간 내"
+    basis: "국세 또는 지방세를 체납한 기업 제외 기업의 범위"
   - id: E4
     section: "2. 제외 기업의 범위"
     name: 허위·부정 신청(서류 간 일치)
     check: check_consistency
     docs: [입주신청서, 사업자등록증, 법인등기부등본, 국세지방세납세증명서]
     detail: "상호·사업자등록번호·대표자가 서류 간 일치"
+    basis: "허위 또는 부정한 방법으로 신청한 기업 제외"
 
   # ── 완비성 ──
   - id: D0
@@ -55,6 +59,7 @@ criteria:
     check: check_completeness
     docs: []
     detail: "필수 공통서류 제출 여부(법인은 등기부·주주명부 포함)"
+    basis: "입주 신청 시 제출 구비서류 목록"
 
 # ── 3. 가점/감점 (증빙서류 존재 → 잠정 점수, 유효성은 사람이 최종 확인) ──
 bonus:

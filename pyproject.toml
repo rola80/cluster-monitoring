@@ -26,6 +26,8 @@ dependencies = [
 docling = ["docling>=2.105"]
 # 근거 문서 RAG(오프라인 임베딩 + 로컬 Chroma): uv sync --extra rag
 rag = ["sentence-transformers>=3.0", "chromadb>=0.5"]
+# unstructured 문서 파싱(레이아웃·요소 추출, PDF): uv sync --extra unstructured
+unstructured = ["unstructured[pdf]>=0.15", "unstructured-inference>=0.8"]
 
 [project.scripts]
 cluster-screening = "cluster_screening.cli:main"

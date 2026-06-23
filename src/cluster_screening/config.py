@@ -24,6 +24,11 @@ OCR_DPI = int(os.getenv("OCR_DPI", "300"))
 USE_DOCLING = os.getenv("USE_DOCLING", "0") == "1"
 DOCLING_TABLES = os.getenv("DOCLING_TABLES", "0") == "1"  # TableFormer(표구조) — 가장 무거움
 
+# ── unstructured(선택) ── 레이아웃·요소 단위 문서 파싱. 'uv sync --extra unstructured' 필요.
+# 현재 RAG 근거문서 적재(ingestion)에서 선택적 백엔드로 사용. 미설치/실패 시 pdfplumber로 폴백.
+USE_UNSTRUCTURED = os.getenv("USE_UNSTRUCTURED", "0") == "1"
+UNSTRUCTURED_STRATEGY = os.getenv("UNSTRUCTURED_STRATEGY", "fast")  # fast(경량) | hi_res(레이아웃모델)
+
 # ── LLM (OpenAI) ── 비정형/OCR보정 필드 추출 폴백. 키 없으면 자동 비활성.
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 ENABLE_LLM = bool(OPENAI_API_KEY)
@@ -43,3 +48,6 @@ RAG_EMBED_MODEL = os.getenv("RAG_EMBED_MODEL", "jhgan/ko-sroberta-multitask")  #
 RAG_CHUNK_CHARS = int(os.getenv("RAG_CHUNK_CHARS", "800"))
 RAG_CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "150"))
 RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
+RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.3"))  # 이 미만 유사도면 근거조항 미첨부(노이즈 방지)
+# 판정 evidence에 근거 조항(RAG)을 첨부. rag 미설치/인덱스 없음이면 자동 무첨부(우아한 degradation).
+ENABLE_RAG_BASIS = os.getenv("ENABLE_RAG_BASIS", "1") == "1"

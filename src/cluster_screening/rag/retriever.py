@@ -20,10 +20,12 @@ def search(query, top_k=None):
     return hits
 
 
-def evidence_for(query, top_k=1):
-    """판정 통합용 간이 헬퍼: 최상위 근거를 'source p.N 제M조' 문자열로."""
+def evidence_for(query, top_k=1, min_score=None):
+    """판정 통합용 간이 헬퍼: 최상위 근거를 'source p.N 제M조' 문자열로.
+    유사도가 min_score 미만이면 무관한 근거로 보고 ''(미첨부)."""
+    min_score = config.RAG_MIN_SCORE if min_score is None else min_score
     hits = search(query, top_k)
-    if not hits:
+    if not hits or hits[0]["score"] < min_score:
         return ""
     h = hits[0]
     loc = f'{h["source"]} p.{h["page"]}'
