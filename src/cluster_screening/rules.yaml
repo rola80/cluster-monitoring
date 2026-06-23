@@ -7,18 +7,17 @@ meta:
   bonus_cap: 5          # 가점 합산 최대 5점
   business_age_years: 7 # 창업 7년 이내
 
-# 필수 공통서류(완비성 검사 대상). 서류번호는 '입주신청 구비서류' 시트 기준.
+# 필수 공통서류(완비성 검사 대상). when: 법인 인 항목은 법인사업자에 한해 필수.
 required_docs:
   - {code: "1-1", name: 사업계획서}
-  - {code: "1-2", name: 사업자등록증}
-  - {code: "1-3", name: 재무제표_부가세과세표준증명원}
-  - {code: "1-6", name: 인감증명서}
+  - {code: "1-2", name: 사업자등록증}                                  # 사본
+  - {code: "1-3", name: 재무제표_부가세과세표준증명원, note: "최근 5년"}
+  - {code: "1-4", name: 법인등기부등본, when: 법인}                     # 법인사업자에 한함
+  - {code: "1-5", name: 주주명부, when: 법인}                          # 법인사업자에 한함
+  - {code: "1-6", name: 인감증명서}                                    # 법인 인감 또는 개인사업자 인감
   - {code: "1-7", name: 국세지방세납세증명서}
   - {code: "1-8", name: 4대보험가입자명부}
   - {code: "1-9", name: 개인정보수집이용동의서}
-optional_docs:
-  - {code: "1-4", name: 법인등기부등본, note: 법인사업자에 한함}
-  - {code: "1-5", name: 주주명부, note: 법인사업자에 한함}
 
 criteria:
   # ── 1. 대상 기업의 범위 ──
@@ -55,7 +54,7 @@ criteria:
     name: 필수 공통서류 완비
     check: check_completeness
     docs: []
-    detail: "필수(O) 공통서류 7종 제출 여부"
+    detail: "필수 공통서류 제출 여부(법인은 등기부·주주명부 포함)"
 
 # ── 3. 가점/감점 (증빙서류 존재 → 잠정 점수, 유효성은 사람이 최종 확인) ──
 bonus:
@@ -66,3 +65,16 @@ bonus:
   - {id: B5, code: "2-15", name: 우수환경산업체 지정,         points: 2,  per_case: true,  doc: 우수환경산업체증빙}
   - {id: B6, code: "2-18", name: 국내 특허등록·해외 특허출원,  points: 2,  per_case: true,  doc: 특허증빙}
   - {id: B7, code: "-",    name: 국가연구개발사업 제재,        points: -5, per_case: false, doc: null, note: 감점(별도 조회 필요)}
+
+# ── 4. 성과 년도별 정리 (연장평가·실적표) ──
+# 근거서류 제출 여부를 확인하고 집계 가능한 항목(건수)은 자동 집계한다.
+# 연도별 금액·인원 등 정밀 수치는 추출 신뢰도 문제로 '확인필요'(사람 확인)로 둔다(설계 원칙: 자동 거절 금지).
+#   extract: count(서류 건수 자동집계) | financial(연도별 금액 사람확인) | headcount(연도별 인원 사람확인)
+performance:
+  - {id: P1, name: 매출액,            unit: 원, extract: financial, source: [재무제표_부가세과세표준증명원]}
+  - {id: P2, name: 영업이익,          unit: 원, extract: financial, source: [재무제표_부가세과세표준증명원]}
+  - {id: P3, name: 고용인력,          unit: 명, extract: headcount, source: [4대보험가입자명부, 고용보험자격취득자명부]}
+  - {id: P4, name: 국내특허등록,      unit: 건, extract: count,     source: [특허증빙]}
+  - {id: P5, name: 해외특허출원_등록, unit: 건, extract: count,     source: [특허증빙]}
+  - {id: P6, name: 수상,              unit: 건, extract: count,     source: [수상_선정증빙]}
+  - {id: P7, name: 인증,              unit: 건, extract: count,     source: [인증서]}

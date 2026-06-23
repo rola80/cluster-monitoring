@@ -61,7 +61,20 @@ def build_report(company_name, record, judgment, out_path):
     for col, w in zip("ABCDEF", [6, 40, 8, 10, 10, 30]):
         ws3.column_dimensions[col].width = w
 
-    # 4) 서류 처리 로그
+    # 4) 성과 년도별 정리 (연장평가·실적)
+    ws_perf = wb.create_sheet("성과 년도별 정리")
+    ws_perf.append(["ID", "지표", "단위", "근거서류", "제출", "집계값", "상태", "비고"])
+    for p in judgment.get("performance", []):
+        ws_perf.append([p["id"], p["지표"], p["단위"], p["근거서류"], p["제출"],
+                        p["집계값"], p["상태"], p["비고"]])
+    _style(ws_perf, 8)
+    for r in range(2, ws_perf.max_row + 1):
+        st = ws_perf.cell(r, 7).value
+        ws_perf.cell(r, 7).fill = PatternFill("solid", fgColor=COLORS.get(st, "FFFFFF"))
+    for col, w in zip("ABCDEFGH", [6, 18, 6, 28, 8, 18, 10, 34]):
+        ws_perf.column_dimensions[col].width = w
+
+    # 5) 서류 처리 로그
     ws4 = wb.create_sheet("서류 처리내역")
     ws4.append(["파일", "분류 유형", "신뢰도", "추출방식", "필드수"])
     for d in record.get("doc_log", []):

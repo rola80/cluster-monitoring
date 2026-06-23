@@ -9,9 +9,11 @@
     python -m cluster_screening.auth delete <아이디>
 """
 import os, json, hashlib, hmac
+from . import PROJECT_ROOT
 
 ITERATIONS = 200_000
-USERS_PATH = os.path.join(os.path.dirname(__file__), "users.json")
+# users.json 은 프로젝트 루트에 둔다(비밀, git 비추적).
+USERS_PATH = os.path.join(PROJECT_ROOT, "users.json")
 
 
 # ── 해시 ──

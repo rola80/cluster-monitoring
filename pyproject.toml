@@ -1,0 +1,40 @@
+[project]
+name = "cluster-screening"
+version = "0.1.0"
+description = "창업·벤처 녹색융합클러스터 입주 신청서류 적합 검토기"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "streamlit>=1.36",
+    "pdfplumber>=0.11",
+    "PyMuPDF>=1.24",
+    "easyocr>=1.7",
+    "pytesseract>=0.3.10",
+    "pdf2image>=1.17",
+    "openai>=1.40",
+    "pyyaml>=6.0",
+    "openpyxl>=3.1",
+    "pandas>=2.0",
+    "rapidfuzz>=3.0",
+    "pyzipper>=0.3.6",
+    "Pillow>=10.0",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+# 표/레이아웃 복원이 필요할 때만(무겁고 RAM 큼): uv sync --extra docling
+docling = ["docling>=2.105"]
+
+[project.scripts]
+cluster-screening = "cluster_screening.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+# 표준 src 레이아웃: src/cluster_screening/ 아래에서 패키지를 자동 탐색한다.
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+cluster_screening = ["rules.yaml"]

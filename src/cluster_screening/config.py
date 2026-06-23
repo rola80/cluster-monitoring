@@ -1,12 +1,12 @@
 """환경설정. 모든 외부 연동(OCR, LLM)은 토글로 끄고 켤 수 있다."""
 import os
-from pathlib import Path
+from . import PROJECT_ROOT
 
 # 프로젝트 루트의 .env를 (있으면) 로드해 환경변수로 주입한다.
 # python-dotenv가 없거나 .env가 없어도 조용히 넘어간다(시스템 환경변수만 사용).
 try:
     from dotenv import load_dotenv
-    load_dotenv(Path(__file__).resolve().parent / ".env")
+    load_dotenv(PROJECT_ROOT / ".env")
 except ImportError:
     pass
 

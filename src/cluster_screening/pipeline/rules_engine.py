@@ -31,13 +31,16 @@ def R(status, detail, evidence=""):
 
 # ── criterion checks ──
 def check_completeness(record, rules):
-    req = rules["required_docs"]
+    et = _entity_type(record)
+    # when: 법인 인 서류(법인등기부·주주명부)는 법인사업자에 한해 필수
+    req = [r for r in rules["required_docs"] if r.get("when") in (None, et)]
     present = set(record["docs"].keys())
     missing = [r["name"] for r in req if r["name"] not in present]
+    n = len(req)
+    got = len(present & {r["name"] for r in req})
     if missing:
-        return R("부적합", f"필수서류 누락: {', '.join(missing)}",
-                 f"제출 {len(present & {r['name'] for r in req})}/{len(req)}종")
-    return R("적합", "필수 공통서류 완비", f"{len(req)}/{len(req)}종 제출")
+        return R("부적합", f"필수서류 누락: {', '.join(missing)}", f"제출 {got}/{n}종 (구분:{et})")
+    return R("적합", "필수 공통서류 완비", f"{n}/{n}종 제출 (구분:{et})")
 
 
 def check_business_age(record, rules):
@@ -154,6 +157,30 @@ def evaluate_bonus(record, rules):
     return rows, total
 
 
+def evaluate_performance(record, rules):
+    """성과 년도별 정리: 근거서류 제출 여부를 확인하고 집계 가능한 항목(건수)은 자동 집계.
+    연도별 금액·인원 등 정밀 수치는 추출 신뢰도 문제로 '확인필요'(사람 확인)로 둔다."""
+    # docs 는 유형당 1건만 보존하므로 건수는 doc_log(전체 파일)에서 유형별로 센다.
+    counts = {}
+    for d in record.get("doc_log", []):
+        counts[d.get("유형")] = counts.get(d.get("유형"), 0) + 1
+    rows = []
+    for p in rules.get("performance", []):
+        srcs = p.get("source", [])
+        present = [s for s in srcs if s in record["docs"]]
+        n_docs = sum(counts.get(s, 0) for s in srcs)
+        if not present:
+            status, value, note = "미제출", "", "근거서류 미제출 → 확인필요"
+        elif p.get("extract") == "count":
+            status, value, note = "집계", f"{n_docs}건(서류 기준)", "연도·국내/해외 구분은 사람 확인"
+        else:  # financial / headcount — 연도별 정밀 수치는 사람 확인
+            status, value, note = "확인필요", "", "근거서류 제출됨 / 연도별 수치는 사람 확인"
+        rows.append({"id": p["id"], "지표": p["name"], "단위": p.get("unit", ""),
+                     "근거서류": " / ".join(srcs), "제출": "O" if present else "X",
+                     "집계값": value, "상태": status, "비고": note})
+    return rows
+
+
 def evaluate(record, rules):
     results = []
     for c in rules["criteria"]:
@@ -162,6 +189,7 @@ def evaluate(record, rules):
         results.append({"id": c["id"], "section": c["section"], "name": c["name"],
                         **res})
     bonus_rows, bonus_total = evaluate_bonus(record, rules)
+    performance = evaluate_performance(record, rules)  # 성과표(종합판정에는 영향 없음)
 
     statuses = [r["status"] for r in results]
     if "부적합" in statuses:
@@ -171,4 +199,4 @@ def evaluate(record, rules):
     else:
         overall = "적합"
     return {"results": results, "bonus": bonus_rows, "bonus_total": bonus_total,
-            "overall": overall}
+            "performance": performance, "overall": overall}

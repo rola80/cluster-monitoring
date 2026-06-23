@@ -48,9 +48,12 @@ flowchart TD
 
 ## 1. 설치
 
+의존성·가상환경은 **uv**로 관리한다(`pyproject.toml` + `uv.lock`).
 ```bash
-pip install -r requirements.txt
+uv sync                  # .venv 생성 + 의존성 설치 + 패키지 editable 설치
+uv sync --extra docling  # (선택) 표/레이아웃 복원(Docling)까지
 ```
+uv가 없으면 `pip install -r requirements.txt`도 유지된다(보조 경로).
 
 스캔 PDF용 한글 OCR은 **EasyOCR**가 기본 엔진이다(`requirements.txt`에 포함, 한글·영어 내장,
 CPU 동작, 최초 1회 모델 자동 다운로드 후 오프라인). 별도 설치는 필요 없다.
@@ -67,22 +70,23 @@ tesseract는 EasyOCR 미설치 시의 폴백일 뿐 기본 경로가 아니다.
 ### 로그인 계정 만들기 (UI 최초 1회 필수)
 Streamlit UI는 로그인 게이트로 보호된다. 등록된 사용자가 없으면 진입할 수 없으니 먼저 계정을 만든다.
 ```bash
-python -m cluster_screening.auth add <아이디>        # 비밀번호는 안전 입력(가림)
-python -m cluster_screening.auth list                # 계정 목록
-python -m cluster_screening.auth delete <아이디>     # 계정 삭제
+uv run python -m cluster_screening.auth add <아이디>     # 비밀번호는 안전 입력(가림)
+uv run python -m cluster_screening.auth list             # 계정 목록
+uv run python -m cluster_screening.auth delete <아이디>  # 계정 삭제
 ```
 비밀번호는 평문 저장하지 않고 PBKDF2-HMAC-SHA256 해시로 `users.json`에 저장된다(`users.json`은 git 비추적).
 CLI(`cluster_screening.cli`)는 로그인 없이 동작한다.
 
 ### Streamlit UI
 ```bash
-streamlit run cluster_screening/app.py
+uv run streamlit run src/cluster_screening/app.py
 ```
 로그인 후 사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
 
 ### CLI
 ```bash
-python -m cluster_screening.cli <폴더|zip|pdf> --name 기업명 --apply 2026-03-16 --pw 비밀번호 --out 판정결과.xlsx
+uv run cluster-screening <폴더|zip|pdf> --name 기업명 --apply 2026-03-16 --pw 비밀번호 --out 판정결과.xlsx
+# 또는:  uv run python -m cluster_screening.cli <경로> ...
 ```
 
 ## 3. 환경설정 (환경변수)
@@ -129,18 +133,28 @@ OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로
 - 분류·추출 정확도는 과거 평가결과를 정답셋으로 측정·개선(Phase 7).
 
 ## 6. 구조
+
+표준 **src 레이아웃**. 비밀·런타임 파일(`.env`, `users.json`)은 프로젝트 루트에 둔다.
 ```
-cluster_screening/
-  app.py            Streamlit UI (로그인 게이트 포함)
-  cli.py            CLI 실행기
-  auth.py           로그인 인증(PBKDF2 해시·users.json) + 계정 관리 CLI
-  config.py         설정/토글(OCR·LLM·zip비번; .env/환경변수로 제어)
-  rules.yaml        판단기준(규칙표)
-  pipeline/
-    ingest.py        (중첩) zip 해제·PDF 수집
-    classify.py      서류 분류
-    extract_text.py  하이브리드 텍스트 추출(텍스트레이어/OCR)
-    extract_fields.py 필드 추출(앵커/정규식 + LLM 폴백)
-    rules_engine.py  룰 판정
-    report.py        리포트(xlsx) 생성
+프로젝트루트/
+  pyproject.toml  uv.lock  .python-version   # uv 패키징
+  .env  users.json                           # 비밀(git 비추적)
+  README.md  CLAUDE.md  NEXTSESSION.md
+  src/cluster_screening/
+    __init__.py       패키지 + PROJECT_ROOT(루트 탐색)
+    app.py            Streamlit UI (로그인 게이트 포함)
+    cli.py            CLI 실행기 (콘솔 스크립트 cluster-screening)
+    auth.py           로그인 인증(PBKDF2 해시·users.json) + 계정 관리 CLI
+    config.py         설정/토글(OCR·LLM·zip비번; .env/환경변수로 제어)
+    rules.yaml        판단기준(규칙표)
+    pipeline/         (B) 신청 서류 검토 파이프라인
+      ingest.py        (중첩) zip 해제·PDF 수집
+      classify.py      서류 분류
+      extract_text.py  하이브리드 텍스트 추출(텍스트레이어/OCR)
+      extract_fields.py 필드 추출(앵커/정규식 + LLM 폴백)
+      rules_engine.py  룰 판정
+      report.py        리포트(xlsx) 생성
 ```
+
+> 📌 **계획됨(미구현)**: 근거 문서(공고·규정·지침) RAG 브랜치 `rag/`(ingestion·chunking·index·retriever)와
+> 판정 evidence에 **근거 조항**을 연결하는 통합. 자세한 로드맵은 `NEXTSESSION.md` 참고.

@@ -61,6 +61,10 @@ if st.button("검토 실행", type="primary", disabled=not up):
         st.subheader("서류 처리내역")
         st.dataframe(record["doc_log"], use_container_width=True)
 
+    st.subheader("성과 년도별 정리")
+    st.caption("근거서류 제출 여부·건수는 자동, 연도별 금액·인원 정밀수치는 사람 확인")
+    st.dataframe(judgment["performance"], use_container_width=True)
+
     out = os.path.join(work, f"판정결과_{company or '기업'}.xlsx")
     report.build_report(company or "(미지정)", record, judgment, out)
     with open(out, "rb") as f:
