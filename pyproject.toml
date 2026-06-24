@@ -24,8 +24,8 @@ dependencies = [
 [project.optional-dependencies]
 # 표/레이아웃 복원이 필요할 때만(무겁고 RAM 큼): uv sync --extra docling
 docling = ["docling>=2.105"]
-# 근거 문서 RAG(오프라인 임베딩 + 로컬 Chroma): uv sync --extra rag
-rag = ["sentence-transformers>=3.0", "chromadb>=0.5"]
+# 근거 문서 RAG(오프라인 임베딩 + 로컬 Chroma + HWP 파싱): uv sync --extra rag
+rag = ["sentence-transformers>=3.0", "chromadb>=0.5", "pyhwp>=0.1b15"]
 # unstructured 문서 파싱(레이아웃·요소 추출, PDF): uv sync --extra unstructured
 unstructured = ["unstructured[pdf]>=0.15", "unstructured-inference>=0.8"]
 

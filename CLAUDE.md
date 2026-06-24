@@ -98,7 +98,8 @@ uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 ```
 임베딩=오프라인 sentence-transformers(`RAG_EMBED_MODEL`, 기본 ko-sroberta), 벡터스토어=로컬 Chroma(`chroma/`).
 무거운 의존성이라 `uv sync --extra rag`로 분리. 콘솔: `uv run rag-index` / `uv run rag-search "<질의>"`.
-근거 PDF는 `data/reference/`에 둔다(git 비추적).
+근거 문서는 `data/reference/`에 둔다(git 비추적). **PDF + HWP 지원**(HWP는 pyhwp로 추출 — 정부 규정 원본이 HWP).
+현재 인덱싱됨: 모집공고(제2025-004호)·관리지침(20250908) HWP 2종.
 
 ### (B) 신청 서류 검토 파이프라인 — `src/cluster_screening/pipeline/`  ✅ 구현됨
 ```
