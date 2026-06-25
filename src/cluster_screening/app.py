@@ -52,50 +52,74 @@ with st.sidebar:
 up = st.file_uploader("구비서류 업로드 (zip 또는 PDF 다중)",
                       type=["zip", "pdf"], accept_multiple_files=True)
 
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+# 검토 실행: 1회만 처리하고 결과를 세션에 저장(이후 rerun에도 유지). 원문 PII는 처리 직후 삭제.
 if st.button("검토 실행", type="primary", disabled=not up):
     work = tempfile.mkdtemp(prefix="cluster_ui_")
-    paths = []
-    for f in up:
-        p = os.path.join(work, f.name)
-        with open(p, "wb") as out:
-            out.write(f.getbuffer())
-        paths.append(p)
-    src = work if len(paths) > 1 or paths[0].endswith(".pdf") else paths[0]
+    try:
+        paths = []
+        for f in up:
+            p = os.path.join(work, f.name)
+            with open(p, "wb") as out:
+                out.write(f.getbuffer())
+            paths.append(p)
+        src = work if len(paths) > 1 or paths[0].endswith(".pdf") else paths[0]
 
-    bar = st.progress(0.0, "분석 중…")
-    def prog(i, n, fn):
-        bar.progress((i + 1) / max(n, 1), f"[{i+1}/{n}] {fn}")
-    record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw,
-                                             progress=prog, workdir=work)
-    judgment = rules_engine.evaluate(record, rules)
-    bar.empty()
+        bar = st.progress(0.0, "분석 중…")
 
-    color = {"적합": "green", "부적합": "red", "확인필요": "orange"}.get(judgment["overall"], "gray")
-    st.markdown(f"## 종합판정: :{color}[{judgment['overall']}]  ·  가점(잠정) {judgment['bonus_total']}점")
+        def prog(i, n, fn):
+            bar.progress((i + 1) / max(n, 1), f"[{i+1}/{n}] {fn}")
+
+        record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw,
+                                                 progress=prog, workdir=work)
+        judgment = rules_engine.evaluate(record, rules)
+        bar.empty()
+
+        name = company or "기업"
+        out_path = os.path.join(work, f"판정결과_{name}.xlsx")
+        report.build_report(company or "(미지정)", record, judgment, out_path)
+        with open(out_path, "rb") as fp:
+            report_bytes = fp.read()   # 리포트를 메모리로 — 파일 잔존 없이 다운로드 제공
+        st.session_state["result"] = {
+            "name": name, "judgment": judgment,
+            "doc_log": record["doc_log"], "report_bytes": report_bytes,
+        }
+    finally:
+        shutil.rmtree(work, ignore_errors=True)  # 업로드·추출 원문(PII) 임시폴더 즉시 삭제
+
+# 결과 표시: 세션에 보존된 결과를 버튼 블록 밖에서 렌더 → 다운로드·사이드바 검색 등 rerun에도 유지
+res = st.session_state.get("result")
+if not res:
+    st.info("구비서류(zip 또는 PDF)를 업로드하고 **검토 실행**을 누르세요.")
+else:
+    j = res["judgment"]
+    head, clr = st.columns([5, 1])
+    with head:
+        color = {"적합": "green", "부적합": "red", "확인필요": "orange"}.get(j["overall"], "gray")
+        st.markdown(f"## 종합판정: :{color}[{j['overall']}]  ·  가점(잠정) {j['bonus_total']}점")
+    with clr:
+        if st.button("결과 지우기"):
+            del st.session_state["result"]
+            st.rerun()
+
+    st.download_button("판정 리포트(xlsx) 다운로드", res["report_bytes"],
+                       file_name=f"판정결과_{res['name']}.xlsx", mime=XLSX_MIME)
 
     st.subheader("판단기준별 결과")
     st.dataframe([{"구분": r["section"], "판단기준": r["name"], "판정": r["status"],
                    "근거/세부": r["detail"], "evidence": r["evidence"],
                    "근거조항(규정·RAG)": r.get("basis", "")}
-                  for r in judgment["results"]], use_container_width=True)
+                  for r in j["results"]], use_container_width=True)
 
     c1, c2 = st.columns(2)
     with c1:
         st.subheader("가점 증빙")
-        st.dataframe(judgment["bonus"], use_container_width=True)
+        st.dataframe(j["bonus"], use_container_width=True)
     with c2:
         st.subheader("서류 처리내역")
-        st.dataframe(record["doc_log"], use_container_width=True)
+        st.dataframe(res["doc_log"], use_container_width=True)
 
     st.subheader("성과 년도별 정리")
     st.caption("근거서류 제출 여부·건수는 자동, 연도별 금액·인원 정밀수치는 사람 확인")
-    st.dataframe(judgment["performance"], use_container_width=True)
-
-    out = os.path.join(work, f"판정결과_{company or '기업'}.xlsx")
-    report.build_report(company or "(미지정)", record, judgment, out)
-    with open(out, "rb") as f:
-        st.download_button("판정 리포트(xlsx) 다운로드", f, file_name=os.path.basename(out),
-                           mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-
-    # 업로드·추출 원문(PII)·리포트 임시폴더 정리(다운로드 바이트는 위에서 이미 버튼에 적재됨)
-    shutil.rmtree(work, ignore_errors=True)
+    st.dataframe(j["performance"], use_container_width=True)
