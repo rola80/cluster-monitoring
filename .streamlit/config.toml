@@ -1,0 +1,3 @@
+# Streamlit 설정. 프로젝트 루트에서 streamlit 실행 시 자동 적용.
+[server]
+maxUploadSize = 1024   # 업로드 상한 1GB (기본 200MB) — 구비서류 zip이 큼

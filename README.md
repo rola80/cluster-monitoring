@@ -137,7 +137,7 @@ flowchart TD
 | `RAG_EMBED_MODEL` | `jhgan/ko-sroberta-multitask` | RAG 임베딩(로컬 경로 지정 시 오프라인) |
 | `ENABLE_RAG_BASIS` / `RAG_MIN_SCORE` | `1` / `0.3` | 판정에 근거 조항 첨부 + 노이즈 필터 |
 | `USE_UNSTRUCTURED` | `0` | RAG 적재에 unstructured 사용 |
-| `ZIP_PASSWORD` | (없음) | 구비서류 zip 비밀번호(샘플 `260529`) |
+| `ZIP_PASSWORD` | (없음) | 구비서류 zip 비밀번호(`.env` 또는 UI/CLI `--pw`로 입력, 하드코딩 금지) |
 
 ## 시작하기
 
@@ -159,7 +159,7 @@ cp .env.example .env        # PowerShell: Copy-Item .env.example .env
 uv run streamlit run src/cluster_screening/app.py
 
 # CLI
-uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw 260529 --out 결과.xlsx
+uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw "<zip비밀번호>" --out 결과.xlsx
 
 # 근거 문서 RAG (data/reference/ 에 공고·규정·지침 PDF·HWP 투입 후)
 uv run rag-index

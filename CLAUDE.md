@@ -30,7 +30,7 @@ uv sync                                  # .venv + 의존성 + 패키지 editabl
 uv sync --extra docling                  # 표/레이아웃 복원(Docling)까지 필요할 때만
 
 uv run streamlit run src/cluster_screening/app.py      # UI (단독 사용 도구 — 로그인 없음)
-uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw 260529 --out 결과.xlsx
+uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw "<zip비밀번호>" --out 결과.xlsx
 
 # (A) 근거 문서 RAG — 무거운 의존성이라 extra로 분리
 uv sync --extra rag
@@ -42,7 +42,7 @@ uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 번들(wheel+모델+NLTK) 생성 → 대상에서 `deploy/install_offline.ps1`. 오프라인 토글: `HF_HUB_OFFLINE`,
 `RAG_EMBED_MODEL`(로컬경로), `OCR_MODEL_DIR`/`OCR_DOWNLOAD_ENABLED=0`, `NLTK_DATA`, `ENABLE_LLM=0`.
 
-샘플 zip 비밀번호 `260529`. 자동 테스트 스위트는 아직 없다 — 검증은 실제 서류로 CLI 실행 후 `종합판정` 확인.
+zip 비밀번호는 `.env`(`ZIP_PASSWORD`) 또는 `--pw`로만 전달(코드/문서 하드코딩 금지). 검증은 실제 서류로 CLI 실행 후 `종합판정` 확인.
 
 ---
 
