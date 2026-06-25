@@ -1,8 +1,7 @@
 """룰엔진(결정형 판정) 회귀 테스트. 판정값: 적합/부적합/확인필요/해당없음."""
 from datetime import date
-import pytest
-from cluster_screening.pipeline import rules_engine as re_
 
+from cluster_screening.pipeline import rules_engine as re_
 
 # 필수 공통서류(법인 조건부 2종 제외) 7종 — 개인사업자 완비 기본셋
 COMMON7 = ["사업계획서", "사업자등록증", "재무제표_부가세과세표준증명원",

@@ -4,7 +4,7 @@
 (모듈 import만으로 모델을 내려받지 않도록).
 """
 from .. import config
-from . import ingestion, chunking
+from . import chunking, ingestion
 
 _MODEL = None
 

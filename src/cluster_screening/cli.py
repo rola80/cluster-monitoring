@@ -1,10 +1,11 @@
 """CLI: 폴더/zip을 받아 판정하고 리포트를 저장.
 사용법: python -m cluster_screening.cli <경로> [--name 기업명] [--apply YYYY-MM-DD] [--pw 비번] [--out 결과.xlsx]
 """
-import argparse, os
+import argparse
 from datetime import datetime
+
 from . import pipeline
-from .pipeline import rules_engine, report
+from .pipeline import report, rules_engine
 
 
 def main():

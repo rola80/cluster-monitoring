@@ -1,11 +1,15 @@
 """Streamlit UI: 기업별 구비서류(zip) 업로드 → 적합 판정 → 리포트 다운로드.
 실행:  streamlit run cluster_screening/app.py
 """
-import os, shutil, tempfile
+import os
+import shutil
+import tempfile
 from datetime import date
+
 import streamlit as st
-from cluster_screening import pipeline, config, auth
-from cluster_screening.pipeline import rules_engine, report
+
+from cluster_screening import auth, config, pipeline
+from cluster_screening.pipeline import report, rules_engine
 
 st.set_page_config(page_title="입주기업 서류적합 검토", layout="wide")
 

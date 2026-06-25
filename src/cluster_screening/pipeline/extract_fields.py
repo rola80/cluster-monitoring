@@ -1,6 +1,7 @@
 """서류 텍스트에서 핵심 필드 추출. 앵커 라벨 + 정규식이 1순위, LLM은 선택 폴백."""
 import re
 from datetime import date
+
 from .. import config
 
 RE_BIZNO = re.compile(r"\d{3}\s*-\s*\d{2}\s*-\s*\d{5}")

@@ -1,5 +1,6 @@
 """환경설정. 모든 외부 연동(OCR, LLM)은 토글로 끄고 켤 수 있다."""
 import os
+
 from . import PROJECT_ROOT
 
 # 프로젝트 루트의 .env를 (있으면) 로드해 환경변수로 주입한다.

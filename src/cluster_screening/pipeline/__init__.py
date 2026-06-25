@@ -1,6 +1,11 @@
 """한 기업의 구비서류를 받아 분류·추출·판정까지 수행하는 오케스트레이터."""
-import os, shutil, tempfile, yaml
-from . import ingest, classify, extract_text, extract_fields
+import os
+import shutil
+import tempfile
+
+import yaml
+
+from . import classify, extract_fields, extract_text, ingest
 
 _RULES = None
 

@@ -72,7 +72,8 @@
 
 - [ ] `config/` 분리 — 자격요건·가점표·문서종류 목록 등 룰 상수를 코드에서 분리(현재 `rules.yaml` + `rules_engine.py`).
 - [ ] `app.py` UI/비즈니스 로직 분리(현재 버튼 핸들러에 처리·리포트 인라인) → service 계층.
-- [ ] 타입 힌트·docstring 보강, `ruff`/`mypy` 정적검사 + CI 도입.
+- ~~`ruff` 정적검사 도입~~ → `[tool.ruff]`(E/F/W/I, line 120, ipynb 제외), 전체 클린(`uv run ruff check`)
+- [ ] (남음) 타입 힌트·`mypy` + GitHub Actions CI(Python 3.14 런너·torch 가용성 확인 필요).
 - [ ] `data/`·`outputs/`·`eval/` 폴더는 **필요해지는 시점에** 생성.
 
 ## 6. 검증 / 기능 확장 🔵

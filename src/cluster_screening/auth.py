@@ -8,7 +8,11 @@
     python -m cluster_screening.auth list
     python -m cluster_screening.auth delete <아이디>
 """
-import os, json, hashlib, hmac
+import hashlib
+import hmac
+import json
+import os
+
 from . import PROJECT_ROOT
 
 ITERATIONS = 200_000
@@ -85,6 +89,7 @@ def streamlit_login_gate():
     """미로그인 시 로그인 폼을 렌더하고 False 반환. 로그인 상태면 True.
     연속 실패 시 세션 단위로 잠금(LOGIN_MAX_FAILS회 → LOGIN_LOCK_SECONDS초)."""
     import time
+
     import streamlit as st
     if st.session_state.get("auth_user"):
         return True
@@ -134,14 +139,16 @@ def streamlit_logout_button():
 
 # ── CLI ──
 def _main():
-    import sys, getpass
+    import getpass
+    import sys
     args = sys.argv[1:]
     usage = ("사용법:\n"
              "  python -m cluster_screening.auth add <아이디> [<비밀번호>]\n"
              "  python -m cluster_screening.auth list\n"
              "  python -m cluster_screening.auth delete <아이디>")
     if not args:
-        print(usage); return
+        print(usage)
+        return
     cmd = args[0]
     if cmd == "add" and len(args) >= 2:
         username = args[1]

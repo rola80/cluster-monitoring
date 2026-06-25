@@ -49,7 +49,20 @@ cluster_screening = ["rules.yaml"]
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+extend-exclude = ["*.ipynb"]   # 탐색용 노트북은 린트 제외
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]   # pycodestyle, pyflakes, isort
+ignore = ["E501"]               # 한글 주석/문자열이 많아 줄길이는 강제하지 않음
+
+[tool.ruff.lint.per-file-ignores]
+"deploy/_fetch_models.py" = ["E402"]   # 진행 출력 사이에 무거운 import를 의도적으로 배치
+
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "ruff>=0.15.19",
 ]

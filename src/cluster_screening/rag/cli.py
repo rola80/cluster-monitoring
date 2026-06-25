@@ -4,6 +4,7 @@
   uv run rag-search "창업 7년 기준이 무엇인가"        # 근거 조항 검색
 """
 import argparse
+
 from .. import config
 from . import index, retriever
 

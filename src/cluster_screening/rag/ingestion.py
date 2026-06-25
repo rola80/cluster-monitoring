@@ -6,9 +6,11 @@
 HWP는 고정 페이지 개념이 없어 page=1로 적재하되, 청킹 단계에서 '제N조'로 근거 위치를 태깅한다.
 텍스트가 거의 없으면(스캔 의심) warning을 남긴다(OCR 적용은 후속 과제).
 """
-import os
 import glob
+import os
+
 import pdfplumber
+
 from .. import config
 
 _EXTS = (".pdf", ".hwp")
@@ -50,6 +52,7 @@ def _pages_hwp(path):
     """pyhwp(hwp5)로 HWP 본문 텍스트 추출. 전체를 page=1 한 덩어리로 반환."""
     import tempfile
     from contextlib import closing
+
     from hwp5.hwp5txt import TextTransform
     from hwp5.xmlmodel import Hwp5File
 

@@ -5,6 +5,7 @@ metadata: source · page · parser_type · chunk_id · token_count · warning  (
 이렇게 하면 각 청크가 정확히 어느 조에 속하는지(article)가 보장되어 evidence가 조항을 정확히 가리킨다.
 """
 import re
+
 from .. import config
 
 _ARTICLE = re.compile(r"제\s*\d+\s*조(?:의\s*\d+)?")

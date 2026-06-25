@@ -4,7 +4,8 @@
 실제 rules.yaml을 정답 규칙표로 사용한다.
 """
 import pytest
-from cluster_screening import pipeline, config
+
+from cluster_screening import config, pipeline
 
 
 @pytest.fixture(autouse=True)

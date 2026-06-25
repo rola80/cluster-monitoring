@@ -1,5 +1,7 @@
 """구비서류 수집: (중첩) zip 해제 후 PDF 목록화."""
-import os, zipfile, tempfile, shutil
+import os
+import tempfile
+import zipfile
 
 try:
     import pyzipper  # AES 암호화 zip 대응(선택)

@@ -2,6 +2,7 @@
 판정값: 적합 / 부적합 / 확인필요 / 해당없음. 모든 결과에 근거(evidence)를 남긴다(감사 가능)."""
 import re
 from datetime import date
+
 from .extract_fields import normalize_name
 
 

@@ -1,6 +1,6 @@
 """판정 결과를 xlsx 총괄표로 출력."""
 from openpyxl import Workbook
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 THIN = Side(style="thin")
 BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
@@ -26,7 +26,8 @@ def build_report(company_name, record, judgment, out_path):
     wb = Workbook()
 
     # 1) 종합판정
-    ws = wb.active; ws.title = "종합판정"
+    ws = wb.active
+    ws.title = "종합판정"
     ws.append(["기업명", company_name])
     ws.append(["종합판정", judgment["overall"]])
     ws.append(["신청일", str(record.get("apply_date") or "")])
@@ -37,7 +38,8 @@ def build_report(company_name, record, judgment, out_path):
         ws.cell(r, 1).font = Font(name="맑은 고딕", bold=True)
         for c in (1, 2):
             ws.cell(r, c).border = BORDER
-    ws.column_dimensions["A"].width = 16; ws.column_dimensions["B"].width = 40
+    ws.column_dimensions["A"].width = 16
+    ws.column_dimensions["B"].width = 40
 
     # 2) 판단기준별 결과
     ws2 = wb.create_sheet("판단기준별 결과")

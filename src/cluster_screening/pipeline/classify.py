@@ -1,5 +1,6 @@
 """PDF → 서류유형(canonical) 분류. 파일명 힌트 + 본문 키워드 점수."""
-import os, re
+import os
+import re
 
 # canonical 유형: (키워드 후보)  — 본문/파일명에서 매칭
 DOC_KEYWORDS = {

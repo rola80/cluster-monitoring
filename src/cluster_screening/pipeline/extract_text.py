@@ -8,6 +8,7 @@ config.USE_DOCLING=True 면 스캔본을 Docling(레이아웃·표 복원)+EasyO
 반환: {"text": str, "method": "text"|"ocr"|"docling"|"none", "pages": int, "ocr_used": bool}
 """
 import pdfplumber
+
 from .. import config
 
 _EASYOCR = None   # EasyOCR Reader 싱글톤(모델 1회 로드 후 재사용)
@@ -94,10 +95,10 @@ def _ocr(pdf_path):
 def _get_docling():
     global _DOCLING
     if _DOCLING is None:
-        from docling.document_converter import DocumentConverter, PdfFormatOption
-        from docling.datamodel.base_models import InputFormat
-        from docling.datamodel.pipeline_options import PdfPipelineOptions, EasyOcrOptions
         from docling.backend.pypdfium2_backend import PyPdfiumDocumentBackend
+        from docling.datamodel.base_models import InputFormat
+        from docling.datamodel.pipeline_options import EasyOcrOptions, PdfPipelineOptions
+        from docling.document_converter import DocumentConverter, PdfFormatOption
         opts = PdfPipelineOptions()
         opts.do_ocr = config.ENABLE_OCR
         opts.do_table_structure = config.DOCLING_TABLES
