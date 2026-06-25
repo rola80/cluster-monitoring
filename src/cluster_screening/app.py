@@ -29,6 +29,31 @@ with st.sidebar:
     st.caption(f"OCR: {'ON' if config.ENABLE_OCR else 'OFF'} · "
                f"LLM: {'ON('+config.LLM_MODEL+')' if config.ENABLE_LLM else 'OFF'}")
 
+    # ── 근거 검색(RAG) ── 공고·규정·지침에서 판정 근거 조항 검색
+    st.divider()
+    st.subheader("📚 근거 검색(RAG)")
+    rag_q = st.text_input("근거 조항 검색", key="rag_q",
+                          placeholder="예: 국세·지방세 체납 기업 제외")
+    if rag_q:
+        try:
+            from cluster_screening.rag import retriever
+            with st.spinner("검색 중…"):
+                hits = retriever.search(rag_q, top_k=5)
+            if not hits:
+                st.caption("인덱스가 비어 있습니다. 터미널에서 `uv run rag-index` 를 먼저 실행하세요.")
+            for h in hits:
+                loc = f'{h["source"]} p.{h["page"]}'
+                if h.get("article"):
+                    loc += f' · {h["article"]}'
+                with st.expander(f'[{h["score"]}] {loc}'):
+                    if h.get("warning"):
+                        st.caption(f"⚠ {h['warning']}")
+                    st.write(h["text"][:500])
+        except ModuleNotFoundError:
+            st.caption("RAG 미설치: `uv sync --extra rag` 후 `uv run rag-index`.")
+        except Exception as e:
+            st.caption(f"검색 불가: {e}")
+
 up = st.file_uploader("구비서류 업로드 (zip 또는 PDF 다중)",
                       type=["zip", "pdf"], accept_multiple_files=True)
 
