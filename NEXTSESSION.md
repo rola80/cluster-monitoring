@@ -1,86 +1,60 @@
-# NEXTSESSION.md — 다음 세션 작업 정의
+# NEXTSESSION.md — 작업 현황 / 다음 할 일
 
-> 이 파일은 **앞으로 할 일**을 정의한다. Claude Code로 작업을 진행할 때마다
-> **완료한 항목은 취소선(`~~...~~`)으로 그어** 표시하고(삭제하지 않음) 한 줄 메모를 남긴다.
-> 새 세션은 `CLAUDE.md`(프로젝트 지침) → 이 파일(할 일) 순으로 읽고 시작한다.
+> 한 것은 `[x]`, 안 한 것은 `[ ]`. 새 세션은 `CLAUDE.md`(지침) → 이 파일 순으로 읽고 시작한다.
 
-## 0. 사용자 지정 요구사항 (목표 시스템)
+## 목표 시스템 (요약)
+환경기업지원사업 제출서류를, **기준 문서(공고·규정·지침)를 RAG 근거로** 자동 검토해
+**근거 조항이 달린 판정 리포트(xlsx)** 를 만든다. 판정은 결정형 Python 규칙(감사 가능), LLM 생성 없음.
 
-사용자가 정의한 목표 시스템(= `CLAUDE.md`에 반영된 비전). 핵심 미비 단계는 아래 §1~§6에 분해.
-- 근거 문서(공고·규정·지침) **RAG 브랜치**로 "판정 근거 조항"을 검색.
-- 판정 evidence = (어느 서류) + (페이지/위치) + (추출 원문 값) + **(적용 규칙/근거 조항)**.
-- 각 추출/청크 단위에 **metadata 6항목**(source·page·parser_type·chunk_id·token_count·warning) 유지.
-- 녹색산업 분야 적합성 판정 로직.
-- 단계별 증분 개발(전체 한 번에 만들지 않음), 큰 변경 전 계획 승인.
+---
 
-## 1. 완료 ✅ (취소선 = 진행 완료)
+## 1. 완료 ✅
 
-- ~~로그인 인증(`auth.py`) — PBKDF2 해시·다중 사용자·Streamlit 게이트~~
-- ~~README 서비스 흐름도(mermaid) + 코드 정합화(OCR=EasyOCR, 로그인 절차)~~
-- ~~보안 점검: `.env`/`users.json` git 비추적·zip-slip 차단 확인~~ → **단, 노출된 OpenAI 키 폐기는 §2 미완**
-- ~~uv 패키징: `pyproject.toml` + `uv.lock` + `.python-version`~~
-- ~~`CLAUDE.md` / `CLAUDE.md.md` 통합 + 사용자 비전 반영~~
-- ~~**엄밀 모듈화: `src/cluster_screening/` 표준 레이아웃 이전**, `.env`/`users.json`은 `PROJECT_ROOT` 기준 로드, import·CLI 검증~~
-- ~~**검증항목 추가**: 필수서류 9종 조건부 완비(법인=등기부·주주명부 포함) + **성과 년도별 정리**(매출·영업이익·고용·국내/해외특허·수상·인증) 절차·리포트 시트·UI 표 추가, 스모크 검증~~ → 단, **연도별 정밀 수치 추출은 미구현**(현재 건수 자동집계 + 금액/인원은 확인필요)
+### 기반·패키징
+- [x] uv 패키징(`pyproject.toml`·`uv.lock`·`.python-version`), src 표준 레이아웃, `PROJECT_ROOT`
+- [x] 콘솔 스크립트: `cluster-app`(UI 런처), `cluster-screening`(CLI), `rag-index`/`rag-search`
+- [x] pytest 42케이스(룰엔진·청킹·캐시·파이프라인), ruff 정적검사, 데드코드 제거
+- [x] 로그인 제거(단독 사용 도구), 제목 "환경기업지원사업 제출서류검토기"
 
-## 2. 보안 (최우선) 🔴
+### RAG (근거 문서)
+- [x] 적재 ingestion — PDF(pdfplumber/unstructured) + **HWP(pyhwp)**
+- [x] 분할 chunking — 실제 '제N조' 제목 경계 + **의미단위(항·호·목·문장) 묶음**(문장 중간 절단 방지)
+- [x] 임베딩 — **OpenAI text-embedding-3-small**(기본) / sentence-transformers(offline 폴백), `RAG_EMBED_PROVIDER`
+- [x] 인덱싱 — 로컬 Chroma(cosine, 영속, protobuf 충돌 회피 런처)
+- [x] 검색 retriever + `evidence_for`, min_score 노이즈 필터
+- [x] (B) 통합 — 판정마다 근거 조항 evidence 첨부(RAG OFF 시 우아한 degradation)
 
-- ~~**노출된 OpenAI API 키 폐기 후 재발급**~~ → 사용자가 노출 키 폐기 완료(2026-06-23). 새 키 필요 시 `.env`에만 저장(커밋 금지).
-- ~~로그인 기능 제거~~ → 단독 사용 도구라 로그인 게이트·`auth.py`·`users.json` 삭제(2026-06-25). 접근 제어는 외부(리버스 프록시 등)에서.
-- ~~처리 후 임시 디렉터리 정리~~ → `pipeline.cleanup(record)`(추출 PII 폴더 삭제), cli finally·app 다운로드 후 호출, 테스트
-- [ ] PII(주민번호·사업자번호) **마스킹·암호화**(Presidio + cryptography). 결과 xlsx 원문 마스킹은 별도(임시파일 잔존은 위에서 해결).
+### 판정·UI
+- [x] 메인 2단계 UI — ① 기준문서 단계별(적재→분할→임베딩→인덱싱, 각 결과 표시) ② 회사 검토
+- [x] 압축 비밀번호는 **암호 zip 감지 시에만** 요청
+- [x] 판단기준: 창업 7년(달력 7주년)·벤처·체납·일치·필수서류 조건부 완비
+- [x] 성과 년도별 정리(건수 자동집계 + 금액·인원 확인필요)
+- [x] **가점**: 건당(per_case)=점수×건수, 정액 1회, 감점(국가R&D 제재)=확인필요, 합산 상한 5점
+- [x] 결과 세션 보존(다운로드·검색 rerun에도 유지), 리포트 xlsx 5시트
 
-## 3. (A) 근거 문서 RAG 브랜치 🟣
+### 속도·로깅·보안
+- [x] 속도: 필드 불필요 유형 OCR 생략 + OCR 앞 8페이지·200DPI + **내용해시 캐시** + **파일 병렬 추출**
+- [x] **파일별 불러오기 상태(O/X)** + 실패/미분류 파일 알림(사람 확인) + **단계별 처리 로그**
+- [x] 보안: `.env`·`data/`·`chroma/`·`.extract_cache/`·`*.xlsx` gitignore, PII 임시폴더 즉시 삭제,
+      zip-slip 차단, zip 비번 하드코딩 제거(.env/입력만), 노출 OpenAI 키 폐기
 
-> 검색 MVP 완료. 임베딩=오프라인 sentence-transformers(ko-sroberta), 벡터스토어=로컬 Chroma. `uv sync --extra rag`.
-- ~~**설계 승인**: 오프라인 임베딩 + 로컬 Chroma 확정~~
-- ~~`rag/ingestion.py` — 공고·규정·지침 PDF 페이지 단위 적재·진단(warning)~~
-- ~~`rag/chunking.py` — 청킹 + metadata 6항목 + '제N조' article 태깅~~
-- ~~`rag/index.py` — 임베딩 → Chroma 인덱스 구축(텔레메트리 OFF)~~
-- ~~`rag/retriever.py` + `rag/cli.py` — 근거 조항 top-k 검색, `rag-index`/`rag-search` 콘솔~~ → 합성 데이터 검증(제9조 검색 성공)
-- ~~**(B)와 통합**: `rules_engine`가 판정 시 `retriever.evidence_for`로 각 기준의 근거 조항을 evidence에 첨부~~ → rules.yaml `basis` 질의 + `ENABLE_RAG_BASIS`/`RAG_MIN_SCORE`(노이즈 필터), 리포트·UI·CLI에 "근거조항" 노출, RAG OFF 시 우아한 degradation 검증
-- ~~**unstructured 파싱 백엔드**: `USE_UNSTRUCTURED`로 ingestion에서 unstructured 사용(미설치/실패 시 pdfplumber 폴백). `uv sync --extra unstructured`~~
-- ~~**HWP 지원**: 근거 원본이 HWP라 ingestion에 pyhwp(hwp5) 추출 추가(PDF·HWP 모두)~~
-- ~~**실데이터 인덱싱**: 모집공고(2025-004)·관리지침(20250908) HWP 2종 인덱싱(88청크) → 판정에 실근거 조항 첨부 검증~~
-- ~~**근거 위치 정밀화**: 제N조 경계로 먼저 분할(`_segments_by_article`) 후 윈도우 → 각 청크가 정확한 조에 귀속. 실데이터 88→321청크, 청킹 테스트 추가~~ → RAG_MIN_SCORE 튜닝은 실운영 데이터로 후속
-- [ ] **운영규정 추가**: 현재 모집공고·관리지침만. 운영규정 원본 확보 시 `data/reference/`에 추가 인덱싱.
-- [ ] **스캔 근거문서 OCR**: 현재 PDF는 텍스트레이어만(스캔이면 warning). 필요 시 OCR/unstructured hi_res 연결.
-- [ ] (선택) unstructured를 (B) 신청서류 `extract_text`에도 백엔드로 확장.
+---
 
-## 3b. 성과 년도별 정리 — 정밀 추출 (후속) 🟡
+## 2. 다음 할 일 ⬜
 
-> 현재 골격: 근거서류 제출 여부 확인 + 건수(특허·수상·인증) 자동집계. 금액·인원은 `확인필요`.
-- [ ] 표준재무제표에서 **연도별 매출액·영업이익** 추출(`extract: financial`).
-- [ ] 4대보험·고용보험 명부에서 **연도별 고용인력(명)** 추출(`extract: headcount`).
-- [ ] 특허 건수의 **국내/해외·연도** 구분(현재 P4·P5가 동일 서류수로 집계됨).
-- [ ] 인증·수상의 유효연도 파싱.
+### RAG 고도화
+- [ ] 스캔(이미지) 근거문서 OCR 연결(현재 텍스트레이어만)
+- [ ] 검색 고도화 — rerank · hybrid(BM25+vector) · query rewriting
+- [ ] 평가셋(질문→근거조항) + recall@k 등 정량 지표
 
-## 4. evidence / metadata 강화 🟡
+### 판정 정밀화
+- [ ] 성과 연도별 정밀 추출(재무제표 매출·영업이익, 명부 인원)
+- [ ] 가점 유효기간·주최기관 요건 자동 검증(현재 사람 확인)
+- [ ] 녹색산업·녹색연관산업 분야 적합성 판정
+- [ ] 여러 기업 일괄 처리 + 총괄표, 연장평가 모드
 
-- [ ] evidence 포맷을 (서류·페이지/위치·원문값·근거조항) 4요소로 표준화(현재 detail/evidence 문자열).
-- [ ] 추출 단위 metadata 6항목 부여 — 현재 `doc_log`는 {file·유형·신뢰도·추출방식·필드수}만 보유.
-- [ ] `warning` 채워진 항목 → 판정 `확인필요`로 자동 연결되는지 추적.
-
-## 4b. 폐쇄망(오프라인) 배포 🟤
-
-> 대상: Windows x64 / Python 3.14 + uv / 전체 기능(RAG+OCR), LLM 제외. 가이드 `deploy/OFFLINE.md`.
-- ~~오프라인 토글(`OCR_MODEL_DIR`/`OCR_DOWNLOAD_ENABLED`, `RAG_EMBED_MODEL` 로컬경로) + 번들 스크립트(prepare/install) + `.env.offline.example`~~ → `uv export` 검증
-- [ ] **실제 번들 빌드·검증**: 인터넷 PC에서 `prepare_offline_bundle.ps1` 실행(wheelhouse·모델 수 GB) → 폐쇄망 모사 환경에서 `install_offline.ps1` + 인덱싱·OCR이 네트워크 없이 동작하는지 확인.
-- [ ] (선택) Python 3.14·uv 자체가 없는 대상까지 커버하려면 인스톨러도 번들.
-
-## 5. 구조 / 품질 🟢
-
-- [ ] `config/` 분리 — 자격요건·가점표·문서종류 목록 등 룰 상수를 코드에서 분리(현재 `rules.yaml` + `rules_engine.py`).
-- [ ] `app.py` UI/비즈니스 로직 분리(현재 버튼 핸들러에 처리·리포트 인라인) → service 계층.
-- ~~`ruff` 정적검사 도입~~ → `[tool.ruff]`(E/F/W/I, line 120, ipynb 제외), 전체 클린(`uv run ruff check`)
-- [ ] (남음) 타입 힌트·`mypy` + GitHub Actions CI(Python 3.14 런너·torch 가용성 확인 필요).
-- [ ] `data/`·`outputs/`·`eval/` 폴더는 **필요해지는 시점에** 생성.
-
-## 6. 검증 / 기능 확장 🔵
-
-- [ ] **한글 OCR(EasyOCR) 실연동 검증** — 스캔본(입주신청서·납세증명서) 필드 추출 정확도.
-- [ ] **OpenAI LLM 폴백 검증** — 키 설정 후 비정형 필드 추출 동작.
-- [ ] 두 번째 기업(스타스테크) 데이터로 분류·추출 **회귀 정답셋**(`eval/`) + pytest.
-- ~~룰엔진 단위 테스트(pytest)~~ → `tests/test_rules_engine.py` 29케이스(완비성 조건부·창업연차·체납·일치성·가점상한·성과·종합판정), `uv run pytest`
-- ~~**창업연차 경계 보정**: 365.25 부동소수 대신 **기준일의 7주년(달력) 날짜와 신청일 비교**로 변경(`_add_years`, 2/29 처리). 정확히 7주년=적합, 다음날=부적합. 경계 테스트 추가~~
-- [ ] 가점 유효기간/건수 실검증, 녹색산업 분야 적합성 판정, 여러 기업 일괄 처리 + 총괄표, 연장평가 모드.
+### 운영·보안
+- [ ] PII(주민번호·사업자번호) 마스킹·암호화
+- [ ] mypy 타입체크 + CI(Python 3.14 런너·의존성 가용성 확인)
+- [ ] (보류) **폐쇄망 오프라인 배포** — 사용자 요청으로 일단 제거, 나중에 재구성
+- [ ] (선택) git 히스토리에서 과거 zip 비번 흔적 제거 — 저장소 공개 시

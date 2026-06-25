@@ -175,6 +175,33 @@ def test_bonus_증빙없으면_0점(rules, make_record):
     assert total == 0
 
 
+def _doclog(typ, n):
+    return [{"file": f"{typ}{i}.pdf", "유형": typ, "신뢰도": .9, "추출방식": "text", "필드수": 0}
+            for i in range(n)]
+
+
+def test_bonus_건당_건수반영(rules, make_record, make_doc):
+    # 특허(건당 2점) 3건 → 6점, 유형 '건당', 건수 3
+    rec = make_record({"특허증빙": make_doc()}, doc_log=_doclog("특허증빙", 3))
+    rows, _ = re_.evaluate_bonus(rec, rules)
+    b6 = next(r for r in rows if r["id"] == "B6")
+    assert b6["유형"] == "건당" and b6["건수"] == 3 and b6["잠정점수"] == 6
+
+
+def test_bonus_정액은_건수무관(rules, make_record, make_doc):
+    # 녹색채권(정액 3점)은 2건이어도 3점
+    rec = make_record({"한국형녹색채권증빙": make_doc()}, doc_log=_doclog("한국형녹색채권증빙", 2))
+    rows, _ = re_.evaluate_bonus(rec, rules)
+    b1 = next(r for r in rows if r["id"] == "B1")
+    assert b1["유형"] == "정액" and b1["잠정점수"] == 3
+
+
+def test_bonus_감점_자동탐지불가_확인필요(rules, make_record):
+    rows, _ = re_.evaluate_bonus(make_record({}), rules)
+    b7 = next(r for r in rows if r["id"] == "B7")
+    assert b7["부여"] == "확인필요" and b7["잠정점수"] == 0
+
+
 # ── evaluate_performance ──
 def test_performance_특허건수_집계(rules, make_record, make_doc):
     doc_log = [{"file": "p1.pdf", "유형": "특허증빙", "신뢰도": .9, "추출방식": "text", "필드수": 0},

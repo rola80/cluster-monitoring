@@ -146,23 +146,31 @@ CHECKS = {f.__name__: f for f in
 
 
 def evaluate_bonus(record, rules):
+    """가점 산정. 건당(per_case) 항목은 점수 × 증빙 건수, 정액 항목은 1회. 합산 후 상한(bonus_cap).
+    유효기간·건수의 실제 유효성은 사람이 최종 확인(잠정 점수). 감점(음수)은 자동탐지 불가 → 확인필요."""
+    counts = {}  # 유형별 증빙 건수(doc_log 기준; docs는 유형당 1건만 보존하므로)
+    for d in record.get("doc_log", []):
+        counts[d.get("유형")] = counts.get(d.get("유형"), 0) + 1
     rows, total = [], 0
     for b in rules.get("bonus", []):
         doc = b.get("doc")
-        present = bool(doc) and doc in record["docs"]
-        # 인증서는 일반 '인증서' 유형 + 사회적기업/벤처 등 세분 유형 포함
-        if b["id"] == "B3":
-            present = any(t in record["docs"] for t in ["인증서"])
-        if b["id"] == "B2":
-            present = "사회적기업인증서" in record["docs"]
-        pts = b["points"] if present and b["points"] > 0 else 0
-        if present and b["points"] > 0:
+        n = counts.get(doc, 0) if doc else 0
+        per_case = bool(b.get("per_case"))
+        pts = 0
+        if b["points"] < 0:
+            give, note = "확인필요", "자동탐지 불가 — 사람 확인(IRIS 등 조회)"
+        elif n > 0:
+            pts = b["points"] * n if per_case else b["points"]
             total += pts
+            give, note = "O", "유효기간·건수 사람 확인"
+        else:
+            give, note = "X", ""
+        if b.get("note"):
+            note = (note + " / " + b["note"]).strip(" /")
         rows.append({
             "id": b["id"], "항목": b["name"], "배점": b["points"],
-            "증빙제출": "O" if present else "X",
-            "잠정점수": pts if present else 0,
-            "비고": ("유효성 사람 확인" if present else "") + (f" / {b['note']}" if b.get("note") else ""),
+            "유형": "건당" if per_case else "정액", "건수": n,
+            "부여": give, "잠정점수": pts, "비고": note,
         })
     total = min(total, rules["meta"]["bonus_cap"])
     return rows, total

@@ -12,7 +12,7 @@ _META_KEYS = ("source", "page", "parser_type", "token_count", "warning", "articl
 
 
 def _embedder():
-    """SentenceTransformer 싱글톤(최초 1회 모델 로드)."""
+    """SentenceTransformer 싱글톤(오프라인 모드, 최초 1회 모델 로드)."""
     global _MODEL
     if _MODEL is None:
         from sentence_transformers import SentenceTransformer
@@ -20,10 +20,25 @@ def _embedder():
     return _MODEL
 
 
+def _embed_openai(texts):
+    """OpenAI 임베딩(text-embedding-3-small 등). 100개씩 배치."""
+    from openai import OpenAI
+    if not config.OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY가 없습니다. .env에 키를 넣으세요(또는 RAG_EMBED_PROVIDER=offline).")
+    client = OpenAI(api_key=config.OPENAI_API_KEY)
+    out = []
+    for i in range(0, len(texts), 100):
+        resp = client.embeddings.create(model=config.RAG_OPENAI_EMBED_MODEL, input=texts[i:i + 100])
+        out.extend(d.embedding for d in resp.data)
+    return out
+
+
 def embed(texts):
-    """문장 리스트 → 정규화된 임베딩(코사인용) 리스트."""
-    model = _embedder()
-    return model.encode(list(texts), normalize_embeddings=True).tolist()
+    """문장 리스트 → 임베딩(코사인용) 리스트. 제공자(openai|offline)에 따라 분기."""
+    texts = list(texts)
+    if config.RAG_EMBED_PROVIDER == "openai":
+        return _embed_openai(texts)
+    return _embedder().encode(texts, normalize_embeddings=True).tolist()
 
 
 def _client():

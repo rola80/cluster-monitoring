@@ -26,21 +26,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 의존성·실행은 **uv**로 관리한다(`pyproject.toml` + `uv.lock`). 표준 src 레이아웃.
 
 ```bash
-uv sync                                  # .venv + 의존성 + 패키지 editable 설치
-uv sync --extra docling                  # 표/레이아웃 복원(Docling)까지 필요할 때만
+uv sync --extra rag --extra unstructured  # .venv + 의존성(RAG·HWP·unstructured) + editable
 
-uv run streamlit run src/cluster_screening/app.py      # UI (단독 사용 도구 — 로그인 없음)
+uv run cluster-app                        # UI 런처(protobuf-safe) → http://localhost:8501
+#  ※ UI는 `streamlit run`이 아니라 cluster-app으로. (chromadb-protobuf 충돌 회피)
 uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw "<zip비밀번호>" --out 결과.xlsx
 
-# (A) 근거 문서 RAG — 무거운 의존성이라 extra로 분리
-uv sync --extra rag
+# (A) 근거 문서 RAG 콘솔(선택; UI ①에서도 단계별로 가능)
 uv run rag-index                          # data/reference/ (PDF·HWP) 인덱싱 → chroma/
 uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 ```
-
-**폐쇄망(오프라인) 배포**: `deploy/OFFLINE.md` 참고. 인터넷 PC에서 `deploy/prepare_offline_bundle.ps1`로
-번들(wheel+모델+NLTK) 생성 → 대상에서 `deploy/install_offline.ps1`. 오프라인 토글: `HF_HUB_OFFLINE`,
-`RAG_EMBED_MODEL`(로컬경로), `OCR_MODEL_DIR`/`OCR_DOWNLOAD_ENABLED=0`, `NLTK_DATA`, `ENABLE_LLM=0`.
 
 zip 비밀번호는 `.env`(`ZIP_PASSWORD`) 또는 `--pw`로만 전달(코드/문서 하드코딩 금지). 검증은 실제 서류로 CLI 실행 후 `종합판정` 확인.
 
@@ -80,7 +75,7 @@ zip 비밀번호는 `.env`(`ZIP_PASSWORD`) 또는 `--pw`로만 전달(코드/문
 ### 설계 원칙 (절대 위반 금지)
 1. **자동 거절 금지** — 추출 신뢰도가 낮거나 스캔을 못 읽으면 `부적합`이 아니라 **`확인필요`** 로 표기.
 2. **최종 판정은 결정형 Python 규칙으로만**(`rules_engine`). 규칙은 사람이 읽고 감사할 수 있어야 한다.
-3. **LLM은 필드 추출 폴백 용도로만.** LLM이 최종 적합/부적합을 결정하지 않는다.
+3. **OpenAI는 RAG 임베딩에만 쓴다.** 최종 적합/부적합 판정은 LLM이 아니라 결정형 규칙이 내린다.
 4. **모든 결과에 evidence를 남긴다.** evidence에는 최소한 (어느 서류) + (몇 페이지/위치) +
    (추출 원문 값) + (적용 규칙/근거 조항)이 포함된다.
 

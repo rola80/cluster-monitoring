@@ -1,8 +1,6 @@
-"""서류 텍스트에서 핵심 필드 추출. 앵커 라벨 + 정규식이 1순위, LLM은 선택 폴백."""
+"""서류 텍스트에서 핵심 필드 추출. 앵커 라벨 + 정규식 기반."""
 import re
 from datetime import date
-
-from .. import config
 
 RE_BIZNO = re.compile(r"\d{3}\s*-\s*\d{2}\s*-\s*\d{5}")
 RE_CORPNO = re.compile(r"\d{6}\s*-\s*\d{7}")
@@ -149,22 +147,3 @@ def extract_fields(doc_type, text):
     # 주주명부는 주주(투자조합 등)의 번호가 섞여 회사 식별필드를 추출하지 않음(존재만 신호)
     # 가점 증빙은 존재 자체를 신호로 사용
     return {k: v for k, v in f.items() if v is not None}
-
-
-# ── LLM 폴백(선택) ──
-def llm_extract(doc_type, text, schema_hint):
-    if not config.ENABLE_LLM:
-        return {}
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=config.OPENAI_API_KEY)
-        msg = (f"다음은 '{doc_type}' 문서에서 추출한 텍스트다. "
-               f"아래 필드를 JSON으로만 출력하라(없으면 null): {schema_hint}\n\n{text[:6000]}")
-        r = client.chat.completions.create(
-            model=config.LLM_MODEL,
-            messages=[{"role": "user", "content": msg}],
-            response_format={"type": "json_object"}, temperature=0)
-        import json
-        return json.loads(r.choices[0].message.content)
-    except Exception:
-        return {}

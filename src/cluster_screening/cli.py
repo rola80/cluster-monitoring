@@ -19,7 +19,7 @@ def main():
 
     apply_d = datetime.strptime(a.apply, "%Y-%m-%d").date() if a.apply else None
     record, rules = pipeline.process_company(a.path, apply_date=apply_d, pw=a.pw,
-                                             progress=lambda i, n, f: print(f"  [{i+1}/{n}] {f}"))
+                                             progress=lambda done, n, msg: print("  " + msg))
     try:
         judgment = rules_engine.evaluate(record, rules)
 

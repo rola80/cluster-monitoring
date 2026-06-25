@@ -7,11 +7,14 @@ config.USE_DOCLING=True 면 스캔본을 Docling(레이아웃·표 복원)+EasyO
 
 반환: {"text": str, "method": "text"|"ocr"|"docling"|"none", "pages": int, "ocr_used": bool}
 """
+import threading
+
 import pdfplumber
 
 from .. import config
 
 _EASYOCR = None   # EasyOCR Reader 싱글톤(모델 1회 로드 후 재사용)
+_EASYOCR_LOCK = threading.Lock()  # 병렬 추출 시 모델 중복 로드 방지
 _DOCLING = None   # Docling DocumentConverter 싱글톤
 
 
@@ -24,11 +27,14 @@ def _text_layer(pdf_path):
     return "\n".join(parts), n
 
 
-def _rasterize(pdf_path, dpi):
-    """PDF → PIL 이미지 리스트. pdf2image → PyMuPDF → pdfplumber 순으로 시도."""
+def _rasterize(pdf_path, dpi, max_pages=0):
+    """PDF → PIL 이미지 리스트(앞 max_pages만, 0=전체). pdf2image → PyMuPDF → pdfplumber 순."""
     try:
         from pdf2image import convert_from_path
-        return convert_from_path(pdf_path, dpi=dpi)
+        kw = {"dpi": dpi}
+        if max_pages:
+            kw["last_page"] = max_pages   # 앞 N페이지만 래스터화(속도)
+        return convert_from_path(pdf_path, **kw)
     except Exception:
         pass
     try:
@@ -37,7 +43,9 @@ def _rasterize(pdf_path, dpi):
         imgs = []
         doc = fitz.open(pdf_path)
         zoom = dpi / 72
-        for page in doc:
+        for i, page in enumerate(doc):
+            if max_pages and i >= max_pages:
+                break
             pix = page.get_pixmap(matrix=fitz.Matrix(zoom, zoom))
             imgs.append(Image.frombytes("RGB", [pix.width, pix.height], pix.samples))
         return imgs
@@ -45,7 +53,9 @@ def _rasterize(pdf_path, dpi):
         pass
     imgs = []
     with pdfplumber.open(pdf_path) as pdf:
-        for pg in pdf.pages:
+        for i, pg in enumerate(pdf.pages):
+            if max_pages and i >= max_pages:
+                break
             imgs.append(pg.to_image(resolution=dpi).original)
     return imgs
 
@@ -54,12 +64,14 @@ def _rasterize(pdf_path, dpi):
 def _get_easyocr():
     global _EASYOCR
     if _EASYOCR is None:
-        import easyocr
-        kw = {"gpu": False, "verbose": False,
-              "download_enabled": config.OCR_DOWNLOAD_ENABLED}  # 폐쇄망: 0이면 다운로드 안 함
-        if config.OCR_MODEL_DIR:
-            kw["model_storage_directory"] = config.OCR_MODEL_DIR  # 번들 모델 폴더
-        _EASYOCR = easyocr.Reader(config.OCR_LANGS, **kw)
+        with _EASYOCR_LOCK:                 # 병렬 추출 시 중복 로드 방지(이중 검사)
+            if _EASYOCR is None:
+                import easyocr
+                kw = {"gpu": False, "verbose": False,
+                      "download_enabled": config.OCR_DOWNLOAD_ENABLED}  # 폐쇄망: 0이면 다운로드 안 함
+                if config.OCR_MODEL_DIR:
+                    kw["model_storage_directory"] = config.OCR_MODEL_DIR  # 번들 모델 폴더
+                _EASYOCR = easyocr.Reader(config.OCR_LANGS, **kw)
     return _EASYOCR
 
 
@@ -67,7 +79,7 @@ def _ocr_easyocr(pdf_path):
     import numpy as np
     reader = _get_easyocr()
     out = []
-    for img in _rasterize(pdf_path, config.OCR_DPI):
+    for img in _rasterize(pdf_path, config.OCR_DPI, config.OCR_MAX_PAGES):
         lines = reader.readtext(np.array(img), detail=0)  # 텍스트만(좌표 제외)
         out.append("\n".join(lines))
     return "\n".join(out)
@@ -76,7 +88,7 @@ def _ocr_easyocr(pdf_path):
 def _ocr_tesseract(pdf_path):
     import pytesseract
     out = []
-    for img in _rasterize(pdf_path, config.OCR_DPI):
+    for img in _rasterize(pdf_path, config.OCR_DPI, config.OCR_MAX_PAGES):
         out.append(pytesseract.image_to_string(img, lang=config.OCR_LANG))
     return "\n".join(out)
 

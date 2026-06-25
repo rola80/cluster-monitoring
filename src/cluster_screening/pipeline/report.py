@@ -56,12 +56,13 @@ def build_report(company_name, record, judgment, out_path):
 
     # 3) 가점 증빙
     ws3 = wb.create_sheet("가점 증빙")
-    ws3.append(["ID", "가점항목", "배점", "증빙제출", "잠정점수", "비고"])
+    ws3.append(["ID", "가점항목", "배점", "유형", "건수", "부여(O/X)", "잠정점수", "비고"])
     for b in judgment["bonus"]:
-        ws3.append([b["id"], b["항목"], b["배점"], b["증빙제출"], b["잠정점수"], b["비고"]])
-    ws3.append(["", "합계(최대 5점)", "", "", judgment["bonus_total"], ""])
-    _style(ws3, 6)
-    for col, w in zip("ABCDEF", [6, 40, 8, 10, 10, 30]):
+        ws3.append([b["id"], b["항목"], b["배점"], b["유형"], b["건수"],
+                    b["부여"], b["잠정점수"], b["비고"]])
+    ws3.append(["", "합계(최대 5점)", "", "", "", "", judgment["bonus_total"], ""])
+    _style(ws3, 8)
+    for col, w in zip("ABCDEFGH", [6, 38, 6, 8, 6, 10, 10, 30]):
         ws3.column_dimensions[col].width = w
 
     # 4) 성과 년도별 정리 (연장평가·실적)
@@ -79,11 +80,12 @@ def build_report(company_name, record, judgment, out_path):
 
     # 5) 서류 처리 로그
     ws4 = wb.create_sheet("서류 처리내역")
-    ws4.append(["파일", "분류 유형", "신뢰도", "추출방식", "필드수"])
+    ws4.append(["파일", "분류 유형", "신뢰도", "추출방식", "글자수", "필드수", "불러옴"])
     for d in record.get("doc_log", []):
-        ws4.append([d["file"], d["유형"], d["신뢰도"], d["추출방식"], d["필드수"]])
-    _style(ws4, 5)
-    for col, w in zip("ABCDE", [40, 24, 10, 10, 8]):
+        ws4.append([d["file"], d["유형"], d["신뢰도"], d["추출방식"],
+                    d.get("글자수", 0), d["필드수"], d.get("불러옴", "")])
+    _style(ws4, 7)
+    for col, w in zip("ABCDEFG", [40, 22, 8, 10, 8, 8, 8]):
         ws4.column_dimensions[col].width = w
 
     wb.save(out_path)
