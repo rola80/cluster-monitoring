@@ -42,7 +42,7 @@
 - ~~**unstructured 파싱 백엔드**: `USE_UNSTRUCTURED`로 ingestion에서 unstructured 사용(미설치/실패 시 pdfplumber 폴백). `uv sync --extra unstructured`~~
 - ~~**HWP 지원**: 근거 원본이 HWP라 ingestion에 pyhwp(hwp5) 추출 추가(PDF·HWP 모두)~~
 - ~~**실데이터 인덱싱**: 모집공고(2025-004)·관리지침(20250908) HWP 2종 인덱싱(88청크) → 판정에 실근거 조항 첨부 검증~~
-- [ ] **근거 위치 정밀화**: HWP는 page=1 한 덩어리라 '제N조' 태깅이 부정확할 수 있음(긴 본문에서 직전 조 채택). 조 단위 분할(제N조 경계 split)로 개선 + RAG_MIN_SCORE 튜닝.
+- ~~**근거 위치 정밀화**: 제N조 경계로 먼저 분할(`_segments_by_article`) 후 윈도우 → 각 청크가 정확한 조에 귀속. 실데이터 88→321청크, 청킹 테스트 추가~~ → RAG_MIN_SCORE 튜닝은 실운영 데이터로 후속
 - [ ] **운영규정 추가**: 현재 모집공고·관리지침만. 운영규정 원본 확보 시 `data/reference/`에 추가 인덱싱.
 - [ ] **스캔 근거문서 OCR**: 현재 PDF는 텍스트레이어만(스캔이면 warning). 필요 시 OCR/unstructured hi_res 연결.
 - [ ] (선택) unstructured를 (B) 신청서류 `extract_text`에도 백엔드로 확장.

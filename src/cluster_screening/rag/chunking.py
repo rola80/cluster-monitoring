@@ -1,8 +1,8 @@
 """페이지 텍스트 → 검색 단위 청크 + metadata 6항목.
 
 metadata: source · page · parser_type · chunk_id · token_count · warning  (+ article)
-정부 규정은 '제N조'가 자연스러운 근거 경계 → 각 청크에 가장 가까운 조 번호를 article로 남겨
-판정 evidence가 "운영규정 제9조"처럼 조항을 가리킬 수 있게 한다.
+정부 규정은 '제N조'가 자연스러운 근거 경계 → **먼저 제N조 경계로 분할**한 뒤, 긴 조는 윈도우로 나눈다.
+이렇게 하면 각 청크가 정확히 어느 조에 속하는지(article)가 보장되어 evidence가 조항을 정확히 가리킨다.
 """
 import re
 from .. import config
@@ -15,48 +15,56 @@ def _approx_tokens(text):
     return len(text.split())
 
 
-def _windows(text, size, overlap):
-    """문자 윈도우로 분할하여 (시작위치, 조각) 목록 반환. overlap만큼 겹친다."""
+def _window_strs(text, size, overlap):
+    """긴 텍스트를 size 문자 윈도우(overlap 겹침)로 나눈다."""
     text = text or ""
     if not text.strip():
         return []
     if len(text) <= size:
-        return [(0, text)]
+        return [text]
     step = max(size - overlap, 1)
-    out = []
-    start = 0
+    out, start = [], 0
     while start < len(text):
         piece = text[start:start + size]
         if piece.strip():
-            out.append((start, piece))
+            out.append(piece)
         start += step
     return out
 
 
+def _segments_by_article(text):
+    """'제N조' 경계로 분할 → [(article, segment)]. 첫 조 앞 서문은 article=''."""
+    text = text or ""
+    spans = list(_ARTICLE.finditer(text))
+    if not spans:
+        return [("", text)]
+    segs = []
+    if spans[0].start() > 0 and text[:spans[0].start()].strip():
+        segs.append(("", text[:spans[0].start()]))      # 서문(첫 조 앞)
+    for i, m in enumerate(spans):
+        end = spans[i + 1].start() if i + 1 < len(spans) else len(text)
+        segs.append((m.group().replace(" ", ""), text[m.start():end]))
+    return segs
+
+
 def chunk_pages(pages, size=None, overlap=None):
-    """페이지 목록 → 청크 목록(각 청크는 metadata 동반)."""
+    """페이지 목록 → 청크 목록(각 청크는 metadata 동반). 조 단위 분할 후 윈도우."""
     size = size or config.RAG_CHUNK_CHARS
     overlap = overlap or config.RAG_CHUNK_OVERLAP
     chunks = []
     for pg in pages:
-        text = pg["text"] or ""
-        # 페이지 내 '제N조' 마커 위치 — 청크 시작 이전의 마지막 마커를 article로 채택
-        markers = [(m.start(), m.group().replace(" ", "")) for m in _ARTICLE.finditer(text)]
-        for j, (start, piece) in enumerate(_windows(text, size, overlap)):
-            article = ""
-            for pos, name in markers:
-                if pos <= start:
-                    article = name
-                else:
-                    break
-            chunks.append({
-                "text": piece,
-                "source": pg["source"],
-                "page": pg["page"],
-                "parser_type": pg["parser_type"],
-                "chunk_id": f'{pg["source"]}#p{pg["page"]}#{j}',
-                "token_count": _approx_tokens(piece),
-                "warning": pg["warning"],
-                "article": article,
-            })
+        j = 0
+        for article, seg in _segments_by_article(pg["text"] or ""):
+            for piece in _window_strs(seg, size, overlap):
+                chunks.append({
+                    "text": piece,
+                    "source": pg["source"],
+                    "page": pg["page"],
+                    "parser_type": pg["parser_type"],
+                    "chunk_id": f'{pg["source"]}#p{pg["page"]}#{j}',
+                    "token_count": _approx_tokens(piece),
+                    "warning": pg["warning"],
+                    "article": article,
+                })
+                j += 1
     return chunks
