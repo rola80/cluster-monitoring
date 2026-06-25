@@ -54,7 +54,11 @@ def _get_easyocr():
     global _EASYOCR
     if _EASYOCR is None:
         import easyocr
-        _EASYOCR = easyocr.Reader(config.OCR_LANGS, gpu=False, verbose=False)
+        kw = {"gpu": False, "verbose": False,
+              "download_enabled": config.OCR_DOWNLOAD_ENABLED}  # 폐쇄망: 0이면 다운로드 안 함
+        if config.OCR_MODEL_DIR:
+            kw["model_storage_directory"] = config.OCR_MODEL_DIR  # 번들 모델 폴더
+        _EASYOCR = easyocr.Reader(config.OCR_LANGS, **kw)
     return _EASYOCR
 
 

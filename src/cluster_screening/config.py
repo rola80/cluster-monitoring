@@ -19,6 +19,9 @@ OCR_ENGINE = os.getenv("OCR_ENGINE", "easyocr")          # easyocr | tesseract
 OCR_LANGS = os.getenv("OCR_LANGS", "ko,en").split(",")   # EasyOCR 언어코드(쉼표구분)
 OCR_LANG = os.getenv("OCR_LANG", "kor+eng")              # tesseract 폴백용(kor 언어팩 필요)
 OCR_DPI = int(os.getenv("OCR_DPI", "300"))
+# 폐쇄망: 미리 받아둔 EasyOCR 모델 폴더 + 다운로드 차단(0)
+OCR_MODEL_DIR = os.getenv("OCR_MODEL_DIR", "")           # 비우면 기본 위치(~/.EasyOCR)
+OCR_DOWNLOAD_ENABLED = os.getenv("OCR_DOWNLOAD_ENABLED", "1") == "1"
 
 # ── Docling(선택) ── 표/레이아웃 복원이 필요할 때만. 느리고 RAM이 커서 기본 OFF.
 USE_DOCLING = os.getenv("USE_DOCLING", "0") == "1"

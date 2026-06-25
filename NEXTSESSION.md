@@ -61,6 +61,13 @@
 - [ ] 추출 단위 metadata 6항목 부여 — 현재 `doc_log`는 {file·유형·신뢰도·추출방식·필드수}만 보유.
 - [ ] `warning` 채워진 항목 → 판정 `확인필요`로 자동 연결되는지 추적.
 
+## 4b. 폐쇄망(오프라인) 배포 🟤
+
+> 대상: Windows x64 / Python 3.14 + uv / 전체 기능(RAG+OCR), LLM 제외. 가이드 `deploy/OFFLINE.md`.
+- ~~오프라인 토글(`OCR_MODEL_DIR`/`OCR_DOWNLOAD_ENABLED`, `RAG_EMBED_MODEL` 로컬경로) + 번들 스크립트(prepare/install) + `.env.offline.example`~~ → `uv export` 검증
+- [ ] **실제 번들 빌드·검증**: 인터넷 PC에서 `prepare_offline_bundle.ps1` 실행(wheelhouse·모델 수 GB) → 폐쇄망 모사 환경에서 `install_offline.ps1` + 인덱싱·OCR이 네트워크 없이 동작하는지 확인.
+- [ ] (선택) Python 3.14·uv 자체가 없는 대상까지 커버하려면 인스톨러도 번들.
+
 ## 5. 구조 / 품질 🟢
 
 - [ ] `config/` 분리 — 자격요건·가점표·문서종류 목록 등 룰 상수를 코드에서 분리(현재 `rules.yaml` + `rules_engine.py`).

@@ -18,6 +18,8 @@ dist/
 # 산출물·인덱스·입력데이터
 outputs/
 chroma/
+# 오프라인 번들(wheelhouse·모델·NLTK, 대용량)
+deploy/bundle/
 # 신청서류(PII)·근거 PDF/HWP 등 외부 입력·대용량은 커밋하지 않음(주석은 같은 줄에 쓰면 패턴에 포함됨)
 data/
 

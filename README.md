@@ -166,9 +166,23 @@ OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로
       classify.py      서류 분류
       extract_text.py  하이브리드 텍스트 추출(텍스트레이어/OCR)
       extract_fields.py 필드 추출(앵커/정규식 + LLM 폴백)
-      rules_engine.py  룰 판정
+      rules_engine.py  룰 판정 (+ 근거조항 RAG 첨부, 성과 년도별)
       report.py        리포트(xlsx) 생성
+    rag/              (A) 근거 문서 RAG (ingestion·chunking·index·retriever·cli, PDF·HWP)
+  deploy/             폐쇄망(오프라인) 배포 도구 (OFFLINE.md, 번들 스크립트)
+  data/reference/     근거 문서(PDF·HWP) 투입 위치 (git 비추적)
 ```
 
-> 📌 **계획됨(미구현)**: 근거 문서(공고·규정·지침) RAG 브랜치 `rag/`(ingestion·chunking·index·retriever)와
-> 판정 evidence에 **근거 조항**을 연결하는 통합. 자세한 로드맵은 `NEXTSESSION.md` 참고.
+## 7. 폐쇄망(오프라인) 배포
+
+인터넷 없는 환경 배포는 **인터넷 PC에서 번들(의존성 wheel + 임베딩·OCR 모델 + NLTK)을 만들어 옮긴 뒤
+오프라인 설치**한다. 절차·스크립트는 **[`deploy/OFFLINE.md`](deploy/OFFLINE.md)** 참고.
+```powershell
+# 인터넷 PC
+uv sync --extra rag --extra unstructured
+.\deploy\prepare_offline_bundle.ps1          # deploy\bundle 생성 → 폐쇄망으로 복사
+# 폐쇄망(대상)
+.\deploy\install_offline.ps1                 # 오프라인 설치
+Copy-Item .\deploy\.env.offline.example .\.env   # 경로 수정 후 사용
+```
+관련 토글: `HF_HUB_OFFLINE`·`RAG_EMBED_MODEL`(로컬경로)·`OCR_MODEL_DIR`·`OCR_DOWNLOAD_ENABLED=0`·`NLTK_DATA`·`ENABLE_LLM=0`.

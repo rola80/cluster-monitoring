@@ -39,9 +39,13 @@ uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --
 
 # (A) 근거 문서 RAG — 무거운 의존성이라 extra로 분리
 uv sync --extra rag
-uv run rag-index                          # data/reference/*.pdf 인덱싱 → chroma/
+uv run rag-index                          # data/reference/ (PDF·HWP) 인덱싱 → chroma/
 uv run rag-search "창업 7년 기준이 무엇인가"   # 근거 조항 검색
 ```
+
+**폐쇄망(오프라인) 배포**: `deploy/OFFLINE.md` 참고. 인터넷 PC에서 `deploy/prepare_offline_bundle.ps1`로
+번들(wheel+모델+NLTK) 생성 → 대상에서 `deploy/install_offline.ps1`. 오프라인 토글: `HF_HUB_OFFLINE`,
+`RAG_EMBED_MODEL`(로컬경로), `OCR_MODEL_DIR`/`OCR_DOWNLOAD_ENABLED=0`, `NLTK_DATA`, `ENABLE_LLM=0`.
 
 샘플 zip 비밀번호 `260529`. 자동 테스트 스위트는 아직 없다 — 검증은 실제 서류로 CLI 실행 후 `종합판정` 확인.
 
