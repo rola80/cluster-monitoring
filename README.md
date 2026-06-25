@@ -1,176 +1,222 @@
-# 창업·벤처 녹색융합클러스터 — 입주 신청서류 적합 검토기 (MVP)
+# 입주서류 적합 검토기 (cluster_screening)
 
-기업별 구비서류(zip/PDF)를 넣으면 **모집공고·운영규정·관리지침의 판단기준**에 따라
-신청요건 적합 여부를 자동 검토하고, 근거가 달린 **판정 리포트(xlsx)**를 만든다.
+기업이 제출한 **구비서류(zip·PDF)** 를 넣으면 **수집 → 분류 → 텍스트추출 → 필드추출 → 룰 판정 → 리포트**
+까지 한 번에 처리하고, 모집공고·운영규정·관리지침을 **RAG로 검색해 판정마다 "근거 조항"을 붙인**
+**감사 가능한 판정 리포트(xlsx)** 를 만드는 도구입니다. (창업·벤처 녹색융합클러스터 입주 신청서류 적합 검토 자동화)
 
-판정 흐름: `구비서류 → (중첩 zip 해제) → 서류 분류 → 하이브리드 텍스트 추출(텍스트레이어/OCR)
-→ 필드 추출 → 룰엔진 판정 → 리포트`
+![Python](https://img.shields.io/badge/Python-3.14-3776AB?logo=python&logoColor=white)
+![Streamlit](https://img.shields.io/badge/Streamlit-UI-FF4B4B?logo=streamlit&logoColor=white)
+![sentence-transformers](https://img.shields.io/badge/sentence--transformers-5.6-EE4C2C)
+![Chroma](https://img.shields.io/badge/Chroma-1.5.9-FF6F61)
+![EasyOCR](https://img.shields.io/badge/EasyOCR-1.7-00897B)
+![pyhwp](https://img.shields.io/badge/pyhwp-HWP-0050A0)
+![pytest](https://img.shields.io/badge/pytest-37_passing-0A9EDC?logo=pytest&logoColor=white)
+![ruff](https://img.shields.io/badge/ruff-clean-D7FF64?logo=ruff&logoColor=black)
+![uv](https://img.shields.io/badge/uv-managed-DE5FE9)
 
-## 서비스 흐름도
+> 프로젝트 지침: [CLAUDE.md](CLAUDE.md) · 로드맵/진행현황: [NEXTSESSION.md](NEXTSESSION.md) · 폐쇄망 배포: [deploy/OFFLINE.md](deploy/OFFLINE.md)
+
+---
+
+## 아키텍처
+
+성격이 다른 **두 갈래**로 구성됩니다. (A) 근거 문서를 검색하는 RAG, (B) 신청 서류를 판정하는 파이프라인.
 
 ```mermaid
 flowchart TD
-    U([사용자]) --> UP[/구비서류 업로드<br/>zip · 폴더 · PDF 다중/]
-    UP --> ENTRY{진입점}
-    ENTRY -->|Streamlit UI| APP[app.py]
-    ENTRY -->|CLI| CLI[cli.py]
+    U["구비서류 업로드<br/>zip · 폴더 · PDF 다중"] --> ENTRY{진입점}
+    ENTRY -->|Streamlit UI| APP["app.py"]
+    ENTRY -->|CLI| CLI["cli.py / cluster-screening"]
     APP --> PROC
     CLI --> PROC
 
-    subgraph PIPE["pipeline.process_company — 서류별 반복"]
-        PROC[수집 ingest.py<br/>중첩 zip 해제·PDF 수집] --> LOOP{{서류별 루프}}
-        LOOP --> EXTRACT[텍스트 추출 extract_text.py]
-        EXTRACT --> HASTEXT{텍스트 레이어<br/>40자/페이지 이상?}
-        HASTEXT -->|예| TXT[pdfplumber 텍스트]
-        HASTEXT -->|아니오 · 스캔| OCR[OCR<br/>EasyOCR → tesseract 폴백]
-        TXT --> CLS
-        OCR --> CLS
-        CLS[서류 분류 classify.py<br/>파일명 힌트 가중치 20 > 본문] --> FLD[필드 추출 extract_fields.py<br/>앵커·정규식 + LLM 폴백]
-        FLD --> LOOP
+    subgraph B["(B) 신청 서류 검토 파이프라인"]
+        PROC["수집 ingest<br/>중첩 zip 해제·PDF 수집"] --> EXT["텍스트추출 extract_text<br/>텍스트레이어 → 없으면 OCR(EasyOCR)"]
+        EXT --> CLS["분류 classify<br/>파일명 힌트 + 본문 키워드"]
+        CLS --> FLD["필드추출 extract_fields<br/>앵커/정규식 + LLM 폴백"]
+        FLD --> RUL["룰판정 rules_engine<br/>결정형 Python(감사 가능)"]
     end
 
-    LOOP -->|완료| REC[(record<br/>docs · apply_date · doc_log)]
-    REC --> RULES[룰엔진 판정 rules_engine.py<br/>rules.yaml의 check_* 1:1 실행]
-    RULES --> JUDGE{종합판정}
-    JUDGE --> A[적합]
-    JUDGE --> B[부적합]
-    JUDGE --> C[확인필요]
-    A --> REP
-    B --> REP
-    C --> REP
-    REP[리포트 생성 report.py<br/>xlsx 4시트] --> DL[/판정 리포트 다운로드/]
+    subgraph A["(A) 근거 문서 RAG"]
+        REF["근거 PDF·HWP<br/>공고·운영규정·관리지침"] --> ING["적재 ingestion<br/>pdfplumber·unstructured·pyhwp"]
+        ING --> CHK["청킹 chunking<br/>조(條) 단위 + metadata 6"]
+        CHK --> IDX["임베딩 index<br/>ko-sroberta(오프라인)"]
+        IDX --> VDB[("Chroma · cosine · 로컬영속")]
+        VDB --> RET["검색 retriever<br/>top-k + min_score"]
+    end
+
+    RET -. "근거 조항 첨부(evidence)" .-> RUL
+    RUL --> REP["리포트 report<br/>xlsx 5시트"]
+    REP --> DL[/판정 리포트 다운로드/]
 ```
 
-판정값은 **적합 / 부적합 / 확인필요 / 해당없음**이며, 하나라도 `부적합`이면 종합 `부적합`,
-없으면 `확인필요`가 하나라도 있으면 `확인필요`, 모두 통과 시 `적합`. 모든 결과에 근거(evidence)가 기록된다.
+### 흐름 한눈에 보기 (처음 보는 분께)
 
-## 1. 설치
+심사관이 손으로 하던 **입주 신청서류 검토**를, 근거를 남기며 자동으로 보조하는 도구입니다.
 
-의존성·가상환경은 **uv**로 관리한다(`pyproject.toml` + `uv.lock`).
-```bash
-uv sync                  # .venv 생성 + 의존성 설치 + 패키지 editable 설치
-uv sync --extra docling  # (선택) 표/레이아웃 복원(Docling)까지
-```
-uv가 없으면 `pip install -r requirements.txt`도 유지된다(보조 경로).
+1. **업로드** — 기업이 낸 구비서류(zip/PDF)를 넣습니다. 중첩 zip·비밀번호도 풉니다.
+2. **분류·추출** — 각 서류가 무엇인지(사업자등록증·납세증명서…) 분류하고, 텍스트를 뽑습니다. 스캔본은 OCR로 읽습니다.
+3. **판정** — 창업 7년 이내·체납 여부·서류 일치·필수서류 완비 등을 **결정형 규칙**으로 판정합니다.
+4. **근거 붙이기** — 각 판정의 **근거 조항**(예: "모집공고 제9조")을 RAG로 찾아 결과에 붙입니다.
+5. **리포트** — 종합판정·판단기준별·가점·성과·처리내역을 담은 **xlsx**를 내려받습니다.
 
-스캔 PDF용 한글 OCR은 **EasyOCR**가 기본 엔진이다(`requirements.txt`에 포함, 한글·영어 내장,
-CPU 동작, 최초 1회 모델 자동 다운로드 후 오프라인). 별도 설치는 필요 없다.
+> **핵심 원칙**: 못 읽거나 애매하면 **거절하지 않고 `확인필요`** 로 사람에게 넘깁니다(자동 거절 금지).
+> 최종 판정은 LLM이 아니라 **사람이 읽고 감사할 수 있는 Python 규칙**이 내립니다.
 
-PDF 래스터화에 `poppler`가 있으면 더 안정적이며, 없으면 PyMuPDF로 폴백한다(선택).
-tesseract는 EasyOCR 미설치 시의 폴백일 뿐 기본 경로가 아니다.
-```bash
-#  (선택) tesseract 폴백 사용 시 — Ubuntu:  sudo apt-get install tesseract-ocr tesseract-ocr-kor poppler-utils
-#                                  macOS :  brew install tesseract tesseract-lang poppler
-```
+## 판정 체계
 
-## 2. 실행
+| 판정값 | 의미 |
+|---|---|
+| **적합** | 요건 충족이 근거와 함께 확인됨 |
+| **부적합** | 요건 미충족이 근거와 함께 확인됨 |
+| **확인필요** | 추출 신뢰도 낮음·스캔 미해독 → 사람 확인 |
+| **해당없음** | 해당 기업/서류에 적용되지 않는 항목 |
 
-### Streamlit UI
-```bash
-uv run streamlit run src/cluster_screening/app.py
-```
-사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
-(단독 사용 도구라 로그인은 없음. 접근 제어가 필요하면 리버스 프록시 등 외부에서 처리.)
+종합판정 = 하나라도 `부적합`이면 부적합 / 없고 `확인필요` 있으면 확인필요 / 모두 통과면 적합.
 
-### CLI
-```bash
-uv run cluster-screening <폴더|zip|pdf> --name 기업명 --apply 2026-03-16 --pw 비밀번호 --out 판정결과.xlsx
-# 또는:  uv run python -m cluster_screening.cli <경로> ...
-```
+## 판단기준 ↔ 코드
 
-### 근거 문서 RAG (선택)
-공고·운영규정·관리지침에서 "이 판정의 근거 조항"을 검색한다. 임베딩은 **오프라인**(sentence-transformers),
-벡터스토어는 **로컬 Chroma**. 무거운 의존성이라 별도 extra로 설치한다.
-```bash
-uv sync --extra rag
-# 근거 PDF를 data/reference/ 에 넣은 뒤:
-uv run rag-index                              # 인덱싱 → chroma/ (최초 1회 임베딩 모델 다운로드)
-uv run rag-search "창업 7년 기준이 무엇인가"      # 근거 조항 top-k 검색(문서·페이지·제N조)
-```
-근거 문서는 **PDF·HWP** 모두 지원한다(HWP는 pyhwp로 추출 — 정부 규정 원본이 HWP인 경우가 많음).
-인덱싱하면 판정 시 각 기준의 **근거 조항이 리포트·UI의 "근거조항" 칸에 자동 첨부**된다
-(`ENABLE_RAG_BASIS`, 노이즈 필터 `RAG_MIN_SCORE`; rag 미설치 시 무첨부). PDF 파서는 기본 pdfplumber이며,
-`USE_UNSTRUCTURED=1`(+`uv sync --extra unstructured`)로 **unstructured** 레이아웃 파서를 쓸 수 있다(실패 시 자동 폴백).
+`rules.yaml`의 각 기준 `check` 값은 `pipeline/rules_engine.py`의 **동명 함수와 1:1**(감사 가능).
 
-## 3. 환경설정 (환경변수)
-
-환경변수는 프로젝트 루트의 `.env`(있으면 자동 로드)로 관리한다. `.env.example`을 복사해 채운다.
-**`.env`는 비밀이므로 git에 올리지 않는다(.gitignore에 등록됨).**
-
-| 변수 | 기본값 | 설명 |
+| 기준 | check 함수 | 핵심 |
 |---|---|---|
-| `ENABLE_OCR` | `1` | 스캔 PDF OCR 사용 여부 |
-| `OCR_ENGINE` | `easyocr` | OCR 엔진 — `easyocr`(기본·한글 내장) 또는 `tesseract`(폴백) |
-| `OCR_LANGS` | `ko,en` | EasyOCR 언어코드(쉼표 구분) |
-| `OCR_LANG` | `kor+eng` | tesseract 폴백용 언어(`kor` 언어팩 필요) |
-| `OCR_DPI` | `300` | 래스터화 해상도 |
-| `USE_DOCLING` | `0` | 표/레이아웃 복원(무겁고 RAM 큼, 선택) |
-| `OPENAI_API_KEY` | (없음) | 설정 시 LLM 필드추출 폴백 자동 활성 |
-| `LLM_MODEL` | `gpt-4.1-mini` | 텍스트 필드추출 워크호스 |
-| `LLM_MODEL_VISION` | `gpt-4.1` | 스캔 OCR 비전 폴백 |
-| `ZIP_PASSWORD` | (없음) | 구비서류 zip 기본 비밀번호 |
-
-OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로 처리, 스캔본은 `확인필요`로 표시).
-
-## 4. 판단기준 ↔ 코드 매핑
-
-판단기준은 `rules.yaml`에 표로 정의되어 있고, 각 기준의 `check` 값은
-`pipeline/rules_engine.py`의 동명 함수와 1:1로 연결된다(감사 가능한 결정형 규칙).
-
-| 기준 | check 함수 | 핵심 로직 |
-|---|---|---|
-| 창업 7년 이내 | `check_business_age` | 법인=회사성립연월일(없으면 개업연월일), 개인=개업연월일, 신청일과 비교 |
+| 창업 7년 이내 | `check_business_age` | 법인=등기부 회사성립연월일(없으면 개업연월일 폴백)/개인=개업연월일, **달력 7주년** 비교 |
 | 벤처기업 자격 | `check_venture` | 벤처기업확인서 제출 여부 |
-| 국세·지방세 체납 | `check_tax_arrears` | 납세증명서 체납문구 검출 |
-| 허위·부정(일치) | `check_consistency` | 신뢰서류 간 사업자번호/상호/대표자 일치 |
-| 필수서류 완비 | `check_completeness` | 필수 공통서류 7종 제출 |
-| 가점/감점 | `evaluate_bonus` | 증빙 제출 시 잠정 점수(합산 최대 5점), 유효성은 사람 확인 |
+| 국세·지방세 체납 | `check_tax_arrears` | 납세증명서 체납상태 |
+| 허위·부정(일치) | `check_consistency` | 신뢰서류 간 사업자번호(불일치=부적합)·상호/대표자(불일치=확인필요) |
+| 필수서류 완비 | `check_completeness` | 9종(법인=등기부·주주명부 포함) 조건부 |
+| 가점/감점 | `evaluate_bonus` | 증빙 존재 시 잠정 점수, 합산 ≤5점 |
+| 성과 년도별 | `evaluate_performance` | 건수 자동집계, 연도별 금액·인원은 `확인필요` |
 
-판정값: **적합 / 부적합 / 확인필요 / 해당없음**. 모든 결과에 근거(evidence)가 기록된다.
+## RAG 단계별 구현 현황
 
-## 5. 한계와 설계 원칙
+우리 RAG는 답변 생성이 아니라 **판정의 근거 조항을 찾아 붙이는 retrieval 중심**입니다(생성은 설계상 부재).
 
-- **자동 거절 금지**: 추출 신뢰도가 낮거나 스캔본은 `부적합`이 아니라 `확인필요`로 표시한다.
-- 가점·유효기간·녹색산업 분야 적합성 등 판단 여지가 큰 항목은 사람이 최종 확인한다.
-- 정부 발급 서류는 라벨 고정 → 앵커/정규식 추출이 1순위, 비정형·OCR보정은 LLM 폴백.
-- 분류·추출 정확도는 과거 평가결과를 정답셋으로 측정·개선(Phase 7).
+| 단계 | 상태 | 구현 / 한계 |
+|---|---|---|
+| Data Load(적재) | 🟢 구현 | `data/reference/`의 PDF·HWP 수집 / URL·DB 로더 없음 |
+| Parsing(추출) | 🟡 부분 | pdfplumber·unstructured·**pyhwp(HWP)** / 스캔 PDF OCR 미연결, HWP page=1 |
+| Chunking | 🟢 구현 | **조(條) 단위 분할** + metadata 6항목 + 제N조 태깅 / 문자 기준(토큰 아님) |
+| Embedding | 🟢 구현 | **오프라인** ko-sroberta, 정규화 / 단일 모델, 품질평가 없음 |
+| Vector DB | 🟢 구현 | 로컬 **Chroma**(cosine·영속) / 매번 전체 재구축, 증분 없음 |
+| Retrieval | 🟢 기본 | top-k + **min_score 필터** + `evidence_for` / rerank·hybrid·query rewriting 없음 |
+| 판정 통합 | 🟢 구현 | 기준별 근거 조항 evidence 첨부, RAG OFF 시 우아한 degradation |
+| Generation(LLM) | ⚪ 부재 | 판정은 결정형 Python(감사 가능) — 의도적으로 LLM 생성 없음 |
+| Evaluation | 🔴 미구현 | 정답셋(질문→근거조항)·recall@k 등 지표 없음 |
+| Retrieval 고도화 | 🔴 미구현 | 전략 비교(rerank/hybrid 등) 없음 |
 
-## 6. 구조
+> metadata 6항목 = `source · page · parser_type · chunk_id · token_count · warning` (+ `article`).
 
-표준 **src 레이아웃**. 비밀·런타임 파일(`.env`)은 프로젝트 루트에 둔다.
+## 기능 모듈
+
+화면(`app.py`)은 얇은 진입점, 로직은 `pipeline/`(판정)과 `rag/`(근거 검색)로 분리합니다.
+
+| 모듈 | 역할 |
+|---|---|
+| `pipeline/ingest.py` | 수집 — (중첩) zip 해제·PDF 수집 (pyzipper AES, basename으로 zip-slip 차단) |
+| `pipeline/classify.py` | 분류 — 파일명 힌트(가중치 20) + 본문 키워드 |
+| `pipeline/extract_text.py` | 추출 — 텍스트레이어(pdfplumber) → 부족하면 OCR(EasyOCR, tesseract 폴백) |
+| `pipeline/extract_fields.py` | 필드추출 — 앵커/정규식(공백 허용 라벨) + LLM 폴백 |
+| `pipeline/rules_engine.py` | 룰 판정 + 가점 + 성과 + 종합판정 + RAG 근거 첨부 |
+| `pipeline/report.py` | xlsx 리포트(종합판정/판단기준별/가점/성과/처리내역 5시트) |
+| `rag/ingestion.py` | 근거 적재 — PDF·HWP 페이지 단위 추출 |
+| `rag/chunking.py` | 조(條) 단위 청킹 + metadata 6항목 |
+| `rag/index.py` | 임베딩(ko-sroberta) → Chroma 인덱스 |
+| `rag/retriever.py` | top-k 검색 + `evidence_for` |
+| `rag/cli.py` | `rag-index` / `rag-search` 콘솔 |
+
+## 핵심 설정 (환경변수 · `.env`)
+
+`.env.example`을 복사해 채웁니다. OCR/LLM이 없어도 동작합니다(스캔본은 `확인필요`).
+
+| 항목 | 기본값 | 위치/설명 |
+|---|---|---|
+| `OPENAI_API_KEY` | (없음) | 설정 시 LLM 필드추출 폴백 ON |
+| `LLM_MODEL` | `gpt-4.1-mini` | 텍스트 필드추출 워크호스 |
+| `ENABLE_OCR` / `OCR_ENGINE` | `1` / `easyocr` | 스캔 PDF OCR(easyocr·tesseract) |
+| `RAG_EMBED_MODEL` | `jhgan/ko-sroberta-multitask` | RAG 임베딩(로컬 경로 지정 시 오프라인) |
+| `ENABLE_RAG_BASIS` / `RAG_MIN_SCORE` | `1` / `0.3` | 판정에 근거 조항 첨부 + 노이즈 필터 |
+| `USE_UNSTRUCTURED` | `0` | RAG 적재에 unstructured 사용 |
+| `ZIP_PASSWORD` | (없음) | 구비서류 zip 비밀번호(샘플 `260529`) |
+
+## 시작하기
+
+### 1. 설치 (uv)
+```bash
+uv sync                                   # 기본
+uv sync --extra rag --extra unstructured  # RAG(임베딩·Chroma·HWP) + unstructured
+```
+
+### 2. 환경변수
+```bash
+cp .env.example .env        # PowerShell: Copy-Item .env.example .env
+# 필요 시 OPENAI_API_KEY 등 입력 (없어도 동작)
+```
+
+### 3. 실행
+```bash
+# Streamlit UI (단독 사용 도구 — 로그인 없음)
+uv run streamlit run src/cluster_screening/app.py
+
+# CLI
+uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw 260529 --out 결과.xlsx
+
+# 근거 문서 RAG (data/reference/ 에 공고·규정·지침 PDF·HWP 투입 후)
+uv run rag-index
+uv run rag-search "국세·지방세 체납 기업 제외"
+```
+
+UI에서: 사이드바에 기업명·신청일·zip비번 입력 → 구비서류 업로드 → **검토 실행** → 결과 확인 + 리포트 다운로드.
+사이드바 **📚 근거 검색(RAG)** 에서 조항을 직접 검색할 수도 있습니다.
+
+## 폐쇄망(오프라인) 배포
+
+인터넷 PC에서 번들(의존성 wheel + 임베딩·OCR 모델 + NLTK)을 만들어 옮긴 뒤 오프라인 설치합니다.
+절차·스크립트는 **[deploy/OFFLINE.md](deploy/OFFLINE.md)**.
+```powershell
+.\deploy\prepare_offline_bundle.ps1   # 인터넷 PC: 번들 생성
+.\deploy\install_offline.ps1          # 폐쇄망: 오프라인 설치
+```
+
+## 보안 / Git 관리
+
+- 비밀값(API Key·zip 비번)은 **`.env`에서만** 읽습니다(코드 하드코딩 금지).
+- `.env`·`data/`·`chroma/`·`outputs/`·`*.xlsx`·`deploy/bundle/` 는 `.gitignore` 제외.
+- 신청 서류 PII: 처리 후 임시폴더는 `pipeline.cleanup`으로 삭제. zip 해제는 basename으로 경로탈출 차단.
+- 단독 사용 도구라 앱 로그인은 없음(접근 제어는 외부 리버스 프록시 등에서).
+
+## 프로젝트 구조
+
 ```
 프로젝트루트/
-  pyproject.toml  uv.lock  .python-version   # uv 패키징
-  .env                                       # 비밀(git 비추적)
-  README.md  CLAUDE.md  NEXTSESSION.md
-  src/cluster_screening/
-    __init__.py       패키지 + PROJECT_ROOT(루트 탐색)
-    app.py            Streamlit UI
-    cli.py            CLI 실행기 (콘솔 스크립트 cluster-screening)
-    config.py         설정/토글(OCR·LLM·zip비번; .env/환경변수로 제어)
-    rules.yaml        판단기준(규칙표)
-    pipeline/         (B) 신청 서류 검토 파이프라인
-      ingest.py        (중첩) zip 해제·PDF 수집
-      classify.py      서류 분류
-      extract_text.py  하이브리드 텍스트 추출(텍스트레이어/OCR)
-      extract_fields.py 필드 추출(앵커/정규식 + LLM 폴백)
-      rules_engine.py  룰 판정 (+ 근거조항 RAG 첨부, 성과 년도별)
-      report.py        리포트(xlsx) 생성
-    rag/              (A) 근거 문서 RAG (ingestion·chunking·index·retriever·cli, PDF·HWP)
-  deploy/             폐쇄망(오프라인) 배포 도구 (OFFLINE.md, 번들 스크립트)
-  data/reference/     근거 문서(PDF·HWP) 투입 위치 (git 비추적)
+├── pyproject.toml  uv.lock  .python-version   # uv 패키징
+├── .env                                       # 비밀(git 비추적)
+├── README.md  CLAUDE.md  NEXTSESSION.md
+├── src/cluster_screening/
+│   ├── app.py             # Streamlit UI (얇은 진입점)
+│   ├── cli.py             # CLI / 콘솔 스크립트 cluster-screening
+│   ├── config.py          # 설정 토글(.env/환경변수)
+│   ├── rules.yaml         # 판단기준 규칙표
+│   ├── pipeline/          # (B) 신청 서류 검토 (위 6모듈)
+│   └── rag/               # (A) 근거 문서 RAG (ingestion·chunking·index·retriever·cli)
+├── tests/                 # pytest (룰엔진·청킹·파이프라인)
+├── deploy/                # 폐쇄망 배포(OFFLINE.md·번들 스크립트)
+├── data/reference/        # 근거 PDF·HWP 투입 (git 제외)
+└── chroma/                # RAG 벡터 인덱스 (git 제외)
 ```
 
-## 7. 폐쇄망(오프라인) 배포
+## 품질 (테스트·린트)
 
-인터넷 없는 환경 배포는 **인터넷 PC에서 번들(의존성 wheel + 임베딩·OCR 모델 + NLTK)을 만들어 옮긴 뒤
-오프라인 설치**한다. 절차·스크립트는 **[`deploy/OFFLINE.md`](deploy/OFFLINE.md)** 참고.
-```powershell
-# 인터넷 PC
-uv sync --extra rag --extra unstructured
-.\deploy\prepare_offline_bundle.ps1          # deploy\bundle 생성 → 폐쇄망으로 복사
-# 폐쇄망(대상)
-.\deploy\install_offline.ps1                 # 오프라인 설치
-Copy-Item .\deploy\.env.offline.example .\.env   # 경로 수정 후 사용
+```bash
+uv run pytest        # 룰엔진·청킹·파이프라인 회귀 (37 케이스)
+uv run ruff check .  # 정적검사
 ```
-관련 토글: `HF_HUB_OFFLINE`·`RAG_EMBED_MODEL`(로컬경로)·`OCR_MODEL_DIR`·`OCR_DOWNLOAD_ENABLED=0`·`NLTK_DATA`·`ENABLE_LLM=0`.
+
+## 다음 단계 (미구현)
+
+진행현황·할 일은 **[NEXTSESSION.md](NEXTSESSION.md)**. 주요 미구현:
+
+- **RAG**: 스캔 근거문서 OCR, 검색 고도화(rerank/hybrid), **정량 평가셋**(질문→근거조항 recall@k)
+- **성과 정밀추출**: 재무제표 연도별 매출·영업이익, 명부 인원 추출(현재 건수만 자동집계)
+- **녹색산업 분야 적합성** 판정, 가점 유효기간·건수 실검증, 여러 기업 일괄 처리, 연장평가 모드
+- PII 마스킹·암호화, mypy·CI, 폐쇄망 실번들 빌드 검증
