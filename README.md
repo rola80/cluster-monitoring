@@ -10,9 +10,7 @@
 
 ```mermaid
 flowchart TD
-    U([사용자]) --> LOGIN{로그인 인증<br/>auth.py}
-    LOGIN -- 실패 --> LOGIN
-    LOGIN -- 성공 --> UP[/구비서류 업로드<br/>zip · 폴더 · PDF 다중/]
+    U([사용자]) --> UP[/구비서류 업로드<br/>zip · 폴더 · PDF 다중/]
     UP --> ENTRY{진입점}
     ENTRY -->|Streamlit UI| APP[app.py]
     ENTRY -->|CLI| CLI[cli.py]
@@ -67,21 +65,12 @@ tesseract는 EasyOCR 미설치 시의 폴백일 뿐 기본 경로가 아니다.
 
 ## 2. 실행
 
-### 로그인 계정 만들기 (UI 최초 1회 필수)
-Streamlit UI는 로그인 게이트로 보호된다. 등록된 사용자가 없으면 진입할 수 없으니 먼저 계정을 만든다.
-```bash
-uv run python -m cluster_screening.auth add <아이디>     # 비밀번호는 안전 입력(가림)
-uv run python -m cluster_screening.auth list             # 계정 목록
-uv run python -m cluster_screening.auth delete <아이디>  # 계정 삭제
-```
-비밀번호는 평문 저장하지 않고 PBKDF2-HMAC-SHA256 해시로 `users.json`에 저장된다(`users.json`은 git 비추적).
-CLI(`cluster_screening.cli`)는 로그인 없이 동작한다.
-
 ### Streamlit UI
 ```bash
 uv run streamlit run src/cluster_screening/app.py
 ```
-로그인 후 사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
+사이드바에서 기업명·신청일·zip 비밀번호를 넣고, 구비서류(zip 또는 PDF 여러 개)를 업로드 → "검토 실행".
+(단독 사용 도구라 로그인은 없음. 접근 제어가 필요하면 리버스 프록시 등 외부에서 처리.)
 
 ### CLI
 ```bash
@@ -106,7 +95,7 @@ uv run rag-search "창업 7년 기준이 무엇인가"      # 근거 조항 top-
 ## 3. 환경설정 (환경변수)
 
 환경변수는 프로젝트 루트의 `.env`(있으면 자동 로드)로 관리한다. `.env.example`을 복사해 채운다.
-**`.env`와 `users.json`은 비밀이므로 git에 올리지 않는다(.gitignore에 등록됨).**
+**`.env`는 비밀이므로 git에 올리지 않는다(.gitignore에 등록됨).**
 
 | 변수 | 기본값 | 설명 |
 |---|---|---|
@@ -148,17 +137,16 @@ OCR/LLM이 없어도 동작한다(텍스트 레이어가 있는 PDF는 그대로
 
 ## 6. 구조
 
-표준 **src 레이아웃**. 비밀·런타임 파일(`.env`, `users.json`)은 프로젝트 루트에 둔다.
+표준 **src 레이아웃**. 비밀·런타임 파일(`.env`)은 프로젝트 루트에 둔다.
 ```
 프로젝트루트/
   pyproject.toml  uv.lock  .python-version   # uv 패키징
-  .env  users.json                           # 비밀(git 비추적)
+  .env                                       # 비밀(git 비추적)
   README.md  CLAUDE.md  NEXTSESSION.md
   src/cluster_screening/
     __init__.py       패키지 + PROJECT_ROOT(루트 탐색)
-    app.py            Streamlit UI (로그인 게이트 포함)
+    app.py            Streamlit UI
     cli.py            CLI 실행기 (콘솔 스크립트 cluster-screening)
-    auth.py           로그인 인증(PBKDF2 해시·users.json) + 계정 관리 CLI
     config.py         설정/토글(OCR·LLM·zip비번; .env/환경변수로 제어)
     rules.yaml        판단기준(규칙표)
     pipeline/         (B) 신청 서류 검토 파이프라인

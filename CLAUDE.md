@@ -29,12 +29,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 uv sync                                  # .venv + 의존성 + 패키지 editable 설치
 uv sync --extra docling                  # 표/레이아웃 복원(Docling)까지 필요할 때만
 
-# 로그인 계정 (UI는 로그인 게이트로 보호 — 최초 1회 계정 생성 필요)
-uv run python -m cluster_screening.auth add <아이디>   # 비번 안전 입력
-uv run python -m cluster_screening.auth list
-uv run python -m cluster_screening.auth delete <아이디>
-
-uv run streamlit run src/cluster_screening/app.py      # UI
+uv run streamlit run src/cluster_screening/app.py      # UI (단독 사용 도구 — 로그인 없음)
 uv run cluster-screening <zip|폴더|pdf> --name 기업명 --apply 2026-03-16 --pw 260529 --out 결과.xlsx
 
 # (A) 근거 문서 RAG — 무거운 의존성이라 extra로 분리
@@ -137,21 +132,21 @@ ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra un
 
 ## 6. 프로젝트 구조
 
-표준 **src 레이아웃**. 비밀·런타임 파일(`.env`, `users.json`)은 **프로젝트 루트**에 두고
+표준 **src 레이아웃**. 비밀·런타임 파일(`.env`)은 **프로젝트 루트**에 두고
 `PROJECT_ROOT`(패키지 `__init__.py`가 pyproject.toml을 찾아 결정)로 로드한다.
 > 처음부터 전부 만들지 않는다. 폴더(`rag/`, `data/`, `outputs/`, `eval/`)는 **필요해지는 시점에** 만든다.
+> 단독 사용 도구라 **로그인은 없음**(접근 제어가 필요하면 외부 리버스 프록시 등으로).
 
 ```
 프로젝트루트/
   pyproject.toml  uv.lock  .python-version    # uv 패키징
-  .env  users.json                            # 비밀값 (절대 커밋 금지, git 비추적)
+  .env                                        # 비밀값 (절대 커밋 금지, git 비추적)
   .gitignore  requirements.txt
   README.md  CLAUDE.md  NEXTSESSION.md
   src/cluster_screening/
     __init__.py        패키지 + PROJECT_ROOT
-    app.py             Streamlit UI (auth 게이트 후 본문 렌더)
+    app.py             Streamlit UI
     cli.py             CLI 진입점
-    auth.py            로그인(PBKDF2 해시·users.json) + 게이트/로그아웃 + 계정 CLI
     config.py          설정 토글(OCR·LLM·zip비번; .env/환경변수)
     rules.yaml         판단기준 규칙표
     pipeline/          (B) 신청 서류 검토 파이프라인 (위 6모듈)
@@ -199,10 +194,10 @@ ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra un
 ## 9. 보안 규칙
 
 - API Key·zip 비밀번호 등 **비밀값은 `.env`에서만 읽는다.** 코드에 직접 쓰지 않는다.
-- `auth.py`: 비밀번호는 PBKDF2-HMAC-SHA256(200k iter, per-user salt) + `hmac.compare_digest`. 평문 저장 안 함.
-- `.gitignore`에 `.env`·`users.json`·벡터 DB 폴더(예: `chroma/`)·`outputs/`·`__pycache__` 포함.
+- `.gitignore`에 `.env`·벡터 DB 폴더(예: `chroma/`)·`data/`·`outputs/`·`__pycache__` 포함.
   **키가 노출되면 즉시 폐기·재발급**한다.
-- 신청 기업 서류에는 개인정보·민감정보가 있다. 로그/리포트에 불필요하게 원문을 남기지 않는다(PII 마스킹 예정).
+- 단독 사용 도구라 앱 로그인은 없음. 접근 제어가 필요하면 외부(리버스 프록시·OS 권한 등)에서 처리.
+- 신청 기업 서류에는 개인정보·민감정보가 있다. 처리 후 임시폴더는 `pipeline.cleanup`으로 삭제. 리포트에 불필요하게 원문을 남기지 않는다(PII 마스킹 예정).
 
 ---
 
@@ -219,7 +214,7 @@ ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra un
 
 ### 검증됨
 - 에이비알 실제 서류 12종 **E2E 검증 완료** → 종합판정 "적합"(개업 2021-03-03 vs 신청 2026-03-16 = 5.0년차).
-- **텍스트 레이어 추출 + 룰엔진 검증됨.** uv 패키징·src 레이아웃·로그인 인증 적용됨.
+- **텍스트 레이어 추출 + 룰엔진 검증됨.** uv 패키징·src 레이아웃·RAG 통합·pytest·ruff 적용됨.
 
 ### 미검증 (로컬 활성화 필요)
 - ⚠️ **한글 OCR(EasyOCR) 미검증** · ⚠️ **OpenAI LLM 폴백 미검증**(샌드박스에 키/모델 없었음).
