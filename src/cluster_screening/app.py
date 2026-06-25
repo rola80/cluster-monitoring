@@ -1,7 +1,7 @@
 """Streamlit UI: 기업별 구비서류(zip) 업로드 → 적합 판정 → 리포트 다운로드.
 실행:  streamlit run cluster_screening/app.py
 """
-import os, tempfile
+import os, shutil, tempfile
 from datetime import date
 import streamlit as st
 from cluster_screening import pipeline, config, auth
@@ -41,7 +41,8 @@ if st.button("검토 실행", type="primary", disabled=not up):
     bar = st.progress(0.0, "분석 중…")
     def prog(i, n, fn):
         bar.progress((i + 1) / max(n, 1), f"[{i+1}/{n}] {fn}")
-    record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw, progress=prog)
+    record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw,
+                                             progress=prog, workdir=work)
     judgment = rules_engine.evaluate(record, rules)
     bar.empty()
 
@@ -71,3 +72,6 @@ if st.button("검토 실행", type="primary", disabled=not up):
     with open(out, "rb") as f:
         st.download_button("판정 리포트(xlsx) 다운로드", f, file_name=os.path.basename(out),
                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+    # 업로드·추출 원문(PII)·리포트 임시폴더 정리(다운로드 바이트는 위에서 이미 버튼에 적재됨)
+    shutil.rmtree(work, ignore_errors=True)

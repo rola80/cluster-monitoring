@@ -26,9 +26,9 @@
 ## 2. 보안 (최우선) 🔴
 
 - ~~**노출된 OpenAI API 키 폐기 후 재발급**~~ → 사용자가 노출 키 폐기 완료(2026-06-23). 새 키 필요 시 `.env`에만 저장(커밋 금지).
-- [ ] 로그인 시도 제한/계정 잠금(brute-force 방어) — 공개 배포 시 필수.
-- [ ] PII(주민번호·사업자번호) 마스킹·암호화 저장(Presidio + cryptography). 결과 xlsx·임시파일 원문 잔존 제거.
-- [ ] 처리 후 임시 디렉터리(`tempfile.mkdtemp`) 정리 루틴.
+- ~~로그인 시도 제한/계정 잠금~~ → `next_fail_state`/`lock_remaining` + 게이트 통합(세션 단위 5회→5분 잠금), 테스트
+- ~~처리 후 임시 디렉터리 정리~~ → `pipeline.cleanup(record)`(추출 PII 폴더 삭제), cli finally·app 다운로드 후 호출, 테스트
+- [ ] PII(주민번호·사업자번호) **마스킹·암호화**(Presidio + cryptography). 결과 xlsx 원문 마스킹은 별도(임시파일 잔존은 위에서 해결).
 
 ## 3. (A) 근거 문서 RAG 브랜치 🟣
 

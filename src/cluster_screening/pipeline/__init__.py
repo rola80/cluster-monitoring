@@ -1,8 +1,15 @@
 """한 기업의 구비서류를 받아 분류·추출·판정까지 수행하는 오케스트레이터."""
-import os, yaml
+import os, shutil, tempfile, yaml
 from . import ingest, classify, extract_text, extract_fields
 
 _RULES = None
+
+
+def cleanup(record):
+    """처리 후 임시 작업 디렉터리(추출된 구비서류 원문=PII) 삭제. 호출부에서 finally로 호출."""
+    wd = (record or {}).get("_workdir")
+    if wd and os.path.isdir(wd):
+        shutil.rmtree(wd, ignore_errors=True)
 
 
 def load_rules(path=None):
@@ -13,10 +20,11 @@ def load_rules(path=None):
     return _RULES
 
 
-def process_company(src_path, apply_date=None, pw="", progress=None):
-    """src_path: zip/폴더/PDF. 반환: record(분류·추출 결과 포함)."""
+def process_company(src_path, apply_date=None, pw="", progress=None, workdir=None):
+    """src_path: zip/폴더/PDF. 반환: record(분류·추출 결과 포함, 임시경로는 record['_workdir'])."""
     rules = _RULES or load_rules()
-    pdfs = ingest.extract_all(src_path, pw=pw)
+    workdir = workdir or tempfile.mkdtemp(prefix="cluster_")
+    pdfs = ingest.extract_all(src_path, workdir=workdir, pw=pw)
     docs = {}
     doc_log = []
     for i, p in enumerate(pdfs):
@@ -38,5 +46,5 @@ def process_company(src_path, apply_date=None, pw="", progress=None):
         apply_date = docs.get("입주신청서", {}).get("fields", {}).get("신청일")
 
     record = {"docs": docs, "apply_date": apply_date, "doc_log": doc_log,
-              "n_pdfs": len(pdfs)}
+              "n_pdfs": len(pdfs), "_workdir": workdir}
     return record, rules

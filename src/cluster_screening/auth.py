@@ -15,6 +15,23 @@ ITERATIONS = 200_000
 # users.json 은 프로젝트 루트에 둔다(비밀, git 비추적).
 USERS_PATH = os.path.join(PROJECT_ROOT, "users.json")
 
+# ── 로그인 시도 제한(브루트포스 완화) ── Streamlit 세션 단위 카운터/잠금.
+LOGIN_MAX_FAILS = 5
+LOGIN_LOCK_SECONDS = 300
+
+
+def lock_remaining(locked_until, now):
+    """잠금 해제까지 남은 초(없으면 0)."""
+    return max(0, int(locked_until - now))
+
+
+def next_fail_state(fails, now):
+    """실패 1회 누적 후 (새 실패횟수, 잠금만료시각). 임계 도달 시 잠금 설정·카운터 리셋."""
+    fails += 1
+    if fails >= LOGIN_MAX_FAILS:
+        return 0, now + LOGIN_LOCK_SECONDS
+    return fails, 0.0
+
 
 # ── 해시 ──
 def hash_password(pw, salt=None, iterations=ITERATIONS):
@@ -65,13 +82,21 @@ def authenticate(username, pw):
 
 # ── Streamlit 게이트 ──
 def streamlit_login_gate():
-    """미로그인 시 로그인 폼을 렌더하고 False 반환. 로그인 상태면 True."""
+    """미로그인 시 로그인 폼을 렌더하고 False 반환. 로그인 상태면 True.
+    연속 실패 시 세션 단위로 잠금(LOGIN_MAX_FAILS회 → LOGIN_LOCK_SECONDS초)."""
+    import time
     import streamlit as st
     if st.session_state.get("auth_user"):
         return True
 
     st.title("🔒 로그인")
     st.caption("창업·벤처 녹색융합클러스터 — 신청서류 적합 검토")
+
+    remaining = lock_remaining(st.session_state.get("auth_locked_until", 0), time.time())
+    if remaining > 0:
+        st.error(f"로그인 시도가 많아 잠겼습니다. {remaining}초 후 다시 시도하세요.")
+        return False
+
     with st.form("login_form"):
         username = st.text_input("아이디")
         pw = st.text_input("비밀번호", type="password")
@@ -79,9 +104,16 @@ def streamlit_login_gate():
     if submitted:
         if authenticate(username, pw):
             st.session_state["auth_user"] = username
+            st.session_state["auth_fails"] = 0
             st.rerun()
         else:
-            st.error("아이디 또는 비밀번호가 올바르지 않습니다.")
+            fails, locked_until = next_fail_state(st.session_state.get("auth_fails", 0), time.time())
+            st.session_state["auth_fails"] = fails
+            st.session_state["auth_locked_until"] = locked_until
+            if locked_until:
+                st.error(f"시도 {LOGIN_MAX_FAILS}회 실패 → {LOGIN_LOCK_SECONDS // 60}분 잠금.")
+            else:
+                st.error(f"아이디 또는 비밀번호가 올바르지 않습니다. (남은 시도 {LOGIN_MAX_FAILS - fails}회)")
     if not load_users():
         st.warning("등록된 사용자가 없습니다. 터미널에서 계정을 만드세요:\n\n"
                    "`python -m cluster_screening.auth add <아이디>`")
