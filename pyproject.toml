@@ -44,3 +44,12 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 cluster_screening = ["rules.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]

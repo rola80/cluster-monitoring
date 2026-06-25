@@ -29,6 +29,14 @@ def R(status, detail, evidence=""):
     return {"status": status, "detail": detail, "evidence": evidence}
 
 
+def _add_years(d, n):
+    """달력 기준 n년 뒤 날짜(기준일의 n주년). 2/29는 비윤년에서 2/28로."""
+    try:
+        return d.replace(year=d.year + n)
+    except ValueError:  # 2월 29일 → 해당 연도에 없음
+        return d.replace(year=d.year + n, day=28)
+
+
 # ── criterion checks ──
 def check_completeness(record, rules):
     et = _entity_type(record)
@@ -62,10 +70,12 @@ def check_business_age(record, rules):
         return R("확인필요", f"{src} 미추출(스캔/OCR 확인 필요)", f"구분:{et}")
     if not apply_d:
         apply_d = date.today()
-    days = (apply_d - base).days
-    years = days / 365.25
-    ev = f"{src}={base}, 신청일={apply_d}, 경과={years:.1f}년 (구분:{et})"
-    if years <= yrs:
+    years = (apply_d - base).days / 365.25  # 표시용(근사 경과연수)
+    # 판정은 달력 기준: 신청일이 '기준일의 7주년'을 지나지 않았으면 7년 이내(경계일 포함=적합).
+    # (자동 거절 금지: 365.25 부동소수로 정확히 7년차가 부적합 처리되던 문제 보정)
+    limit_date = _add_years(base, yrs)
+    ev = f"{src}={base}, 신청일={apply_d}, 7년기준일={limit_date}, 경과={years:.1f}년 (구분:{et})"
+    if apply_d <= limit_date:
         return R("적합", f"창업 {years:.1f}년차 (7년 이내)", ev)
     return R("부적합", f"창업 {years:.1f}년 경과 (7년 초과)", ev)
 
