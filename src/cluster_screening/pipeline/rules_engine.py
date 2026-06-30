@@ -148,9 +148,10 @@ CHECKS = {f.__name__: f for f in
 def evaluate_bonus(record, rules):
     """가점 산정. 건당(per_case) 항목은 점수 × 증빙 건수, 정액 항목은 1회. 합산 후 상한(bonus_cap).
     유효기간·건수의 실제 유효성은 사람이 최종 확인(잠정 점수). 감점(음수)은 자동탐지 불가 → 확인필요."""
-    counts = {}  # 유형별 증빙 건수(doc_log 기준; docs는 유형당 1건만 보존하므로)
+    counts, files = {}, {}  # 유형별 증빙 건수·파일명(doc_log 기준; docs는 유형당 1건만 보존)
     for d in record.get("doc_log", []):
         counts[d.get("유형")] = counts.get(d.get("유형"), 0) + 1
+        files.setdefault(d.get("유형"), []).append(d.get("file"))
     rows, total = [], 0
     for b in rules.get("bonus", []):
         doc = b.get("doc")
@@ -170,33 +171,65 @@ def evaluate_bonus(record, rules):
         rows.append({
             "id": b["id"], "항목": b["name"], "배점": b["points"],
             "유형": "건당" if per_case else "정액", "건수": n,
-            "부여": give, "잠정점수": pts, "비고": note,
+            "부여": give, "잠정점수": pts,
+            "근거파일": ", ".join(files.get(doc, [])) or "근거문서 없음", "비고": note,
         })
     total = min(total, rules["meta"]["bonus_cap"])
     return rows, total
 
 
+def _latest_financial(vals):
+    """{연도: 값} → '최신연도: 값' 문자열(빈값 제외, 숫자 연도 우선 최신)."""
+    items = {k: v for k, v in (vals or {}).items() if v is not None}
+    if not items:
+        return ""
+    yrs = [k for k in items if str(k).strip().isdigit()]
+    k = max(yrs, key=lambda x: int(x)) if yrs else ("당기" if "당기" in items else next(iter(items)))
+    v = items[k]
+    return f"{k}: {v:,}" if isinstance(v, int) else f"{k}: {v}"
+
+
 def evaluate_performance(record, rules):
-    """성과 년도별 정리: 근거서류 제출 여부를 확인하고 집계 가능한 항목(건수)은 자동 집계.
-    연도별 금액·인원 등 정밀 수치는 추출 신뢰도 문제로 '확인필요'(사람 확인)로 둔다."""
-    # docs 는 유형당 1건만 보존하므로 건수는 doc_log(전체 파일)에서 유형별로 센다.
-    counts = {}
+    """성과 년도별 정리: 건수 자동집계 + 고용인력(연번)·재무 항목은 추출값 표기(없으면 확인필요)."""
+    counts, files = {}, {}  # docs 는 유형당 1건만 → 건수·파일명은 doc_log(전체)에서
     for d in record.get("doc_log", []):
         counts[d.get("유형")] = counts.get(d.get("유형"), 0) + 1
+        files.setdefault(d.get("유형"), []).append(d.get("file"))
+    fin_fields = record["docs"].get("재무제표_부가세과세표준증명원", {}).get("fields", {})
+    fin, fin_page = fin_fields.get("재무", {}), fin_fields.get("재무_page")
+    fin_file = record["docs"].get("재무제표_부가세과세표준증명원", {}).get("file", "")
     rows = []
     for p in rules.get("performance", []):
         srcs = p.get("source", [])
         present = [s for s in srcs if s in record["docs"]]
         n_docs = sum(counts.get(s, 0) for s in srcs)
+        kind = p.get("extract")
+        evidence = ", ".join(fn for s in srcs for fn in files.get(s, [])) or "근거문서 없음"
         if not present:
             status, value, note = "미제출", "", "근거서류 미제출 → 확인필요"
-        elif p.get("extract") == "count":
+        elif kind == "count":
             status, value, note = "집계", f"{n_docs}건(서류 기준)", "연도·국내/해외 구분은 사람 확인"
-        else:  # financial / headcount — 연도별 정밀 수치는 사람 확인
-            status, value, note = "확인필요", "", "근거서류 제출됨 / 연도별 수치는 사람 확인"
+        elif kind == "headcount":
+            doc = next((record["docs"].get(s) for s in srcs
+                        if record["docs"].get(s, {}).get("fields", {}).get("고용인력")), None)
+            if doc:
+                pg = doc["fields"].get("고용인력_page")
+                evidence = doc["file"] + (f" p.{pg}" if pg else "")
+                status, value, note = "추출", f'{doc["fields"]["고용인력"]}명', "연번 최댓값 / 사람 확인"
+            else:
+                status, value, note = "확인필요", "", "근거서류 제출됨 / 인원 사람 확인"
+        elif kind == "financial":
+            latest = _latest_financial(fin.get(p["name"]))
+            if latest:
+                evidence = fin_file + (f" p.{fin_page}" if fin_page else "")
+                status, value, note = "추출", latest, "재무제표 추출 / 사람 확인"
+            else:
+                status, value, note = "확인필요", "", "근거서류 제출됨 / 금액 사람 확인"
+        else:
+            status, value, note = "확인필요", "", "사람 확인"
         rows.append({"id": p["id"], "지표": p["name"], "단위": p.get("unit", ""),
                      "근거서류": " / ".join(srcs), "제출": "O" if present else "X",
-                     "집계값": value, "상태": status, "비고": note})
+                     "집계값": value, "근거(파일·페이지)": evidence, "상태": status, "비고": note})
     return rows
 
 
@@ -223,6 +256,9 @@ def evaluate(record, rules):
                         "basis": basis, **res})
     bonus_rows, bonus_total = evaluate_bonus(record, rules)
     performance = evaluate_performance(record, rules)  # 성과표(종합판정에는 영향 없음)
+    _fdoc = record["docs"].get("재무제표_부가세과세표준증명원", {})
+    financials = {"items": _fdoc.get("fields", {}).get("재무", {}),
+                  "file": _fdoc.get("file", ""), "page": _fdoc.get("fields", {}).get("재무_page")}
 
     statuses = [r["status"] for r in results]
     if "부적합" in statuses:
@@ -232,4 +268,4 @@ def evaluate(record, rules):
     else:
         overall = "적합"
     return {"results": results, "bonus": bonus_rows, "bonus_total": bonus_total,
-            "performance": performance, "overall": overall}
+            "performance": performance, "financials": financials, "overall": overall}

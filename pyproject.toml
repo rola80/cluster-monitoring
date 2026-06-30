@@ -8,8 +8,6 @@ dependencies = [
     "streamlit>=1.36",
     "pdfplumber>=0.11",
     "PyMuPDF>=1.24",
-    "easyocr>=1.7",
-    "pytesseract>=0.3.10",
     "pdf2image>=1.17",
     "openai>=1.40",
     "pyyaml>=6.0",
@@ -22,6 +20,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# 로컬 OCR(EasyOCR/tesseract) — 기본은 OpenAI Vision이라 불필요. 오프라인 OCR 시: uv sync --extra ocr-local
+ocr-local = ["easyocr>=1.7", "pytesseract>=0.3.10"]
 # 표/레이아웃 복원이 필요할 때만(무겁고 RAM 큼): uv sync --extra docling
 docling = ["docling>=2.105"]
 # 근거 문서 RAG(오프라인 임베딩 + 로컬 Chroma + HWP 파싱): uv sync --extra rag

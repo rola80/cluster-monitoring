@@ -43,131 +43,60 @@ def _needs_password(uploads):
     return False
 
 
-def _reset_ref(*keys):
-    """기준 문서 단계 상태 초기화(상위 단계 재실행 시 하위 단계 무효화)."""
-    for k in keys:
-        st.session_state.pop(k, None)
-
-
-# ════════════════ ① 기준 문서 — 단계별 RAG 구축 ════════════════
-st.header("① 기준 문서 — 판정 근거 구축")
-st.caption("모집공고·운영규정·관리지침을 **적재 → 분할 → 임베딩 → 인덱싱** 순으로 단계별로 처리합니다. "
-           "각 단계 결과를 확인하며 진행하세요.")
+# ════════════════ ① 기준 문서 — 판정 근거 ════════════════
+st.header("① 기준 문서 — 판정 근거")
+st.caption("모집공고·운영규정·관리지침을 올리면 검색용 근거로 처리합니다(적재→분할→임베딩→인덱싱 자동).")
 
 ref_up = st.file_uploader("기준 문서 (PDF·HWP, 여러 개)", type=["pdf", "hwp"],
                           accept_multiple_files=True, key="ref_up")
 has_default = os.path.isdir(config.RAG_REFERENCE_DIR) and any(
     n.lower().endswith((".pdf", ".hwp")) for n in os.listdir(config.RAG_REFERENCE_DIR))
 
-# ── 단계 1: 적재(Load & Parse) ──
-st.markdown("**1단계 · 적재(Load)** — 파일을 읽어 텍스트를 추출합니다.")
-lc1, lc2 = st.columns(2)
-with lc1:
-    do_load = st.button("📥 업로드한 문서 적재", disabled=not ref_up)
-with lc2:
-    do_load_default = st.button("📁 기본 문서 적재 (data/reference)", disabled=not has_default)
+no_key = config.RAG_EMBED_PROVIDER == "openai" and not config.OPENAI_API_KEY
+if no_key:
+    st.warning("OpenAI 임베딩에 `OPENAI_API_KEY`가 필요합니다(.env). offline 모드: `RAG_EMBED_PROVIDER=offline`")
 
-if do_load or do_load_default:
-    _reset_ref("ref_pages", "ref_chunks", "ref_embeds", "ref_indexed")
+bc1, bc2 = st.columns(2)
+with bc1:
+    do_proc = st.button("기준 문서 처리", type="primary", disabled=not ref_up or no_key)
+with bc2:
+    do_default = st.button("기본 문서 사용 (data/reference)", disabled=not has_default or no_key)
+
+if do_proc or do_default:
+    st.session_state.pop("ref_indexed", None)
     try:
-        from cluster_screening.rag import ingestion
-        if do_load:
-            refdir = tempfile.mkdtemp(prefix="ref_")
-            try:
-                for f in ref_up:
-                    with open(os.path.join(refdir, f.name), "wb") as out:
-                        out.write(f.getbuffer())
-                pages = ingestion.load_pages(refdir)
-            finally:
-                shutil.rmtree(refdir, ignore_errors=True)
-        else:
-            pages = ingestion.load_pages()  # data/reference
-        st.session_state["ref_pages"] = pages
-    except Exception as e:
-        st.error(f"적재 실패: {e}")
-
-pages = st.session_state.get("ref_pages")
-if pages:
-    nchars = sum(len(p["text"]) for p in pages)
-    srcs = sorted({p["source"] for p in pages})
-    m1, m2, m3 = st.columns(3)
-    m1.metric("문서", f"{len(srcs)}개")
-    m2.metric("페이지", f"{len(pages)}개")
-    m3.metric("추출 글자수", f"{nchars:,}")
-    st.dataframe([{"문서": p["source"], "page": p["page"], "추출방식": p["parser_type"],
-                   "글자수": len(p["text"]), "경고": p["warning"]} for p in pages],
-                 use_container_width=True, hide_index=True)
-    with st.expander("추출 텍스트 미리보기"):
-        st.text((pages[0]["text"] or "")[:1200])
-
-# ── 단계 2: 분할(Split / Chunk) ──
-if pages:
-    st.markdown("**2단계 · 분할(Split·Chunk)** — 실제 조(條) 제목 단위로 나누고 metadata를 붙입니다.")
-    if st.button("✂️ 청킹 실행"):
-        _reset_ref("ref_chunks", "ref_embeds", "ref_indexed")
-        from cluster_screening.rag import chunking
-        st.session_state["ref_chunks"] = chunking.chunk_pages(pages)
-
-chunks = st.session_state.get("ref_chunks")
-if chunks:
-    arts = sorted({c["article"] for c in chunks if c["article"]})
-    avg_tok = sum(c["token_count"] for c in chunks) // len(chunks)
-    m1, m2, m3 = st.columns(3)
-    m1.metric("청크", f"{len(chunks)}개")
-    m2.metric("조항 종류", f"{len(arts)}종")
-    m3.metric("평균 토큰", f"{avg_tok}")
-    if arts:
-        st.caption("조항: " + ", ".join(arts[:14]) + (" …" if len(arts) > 14 else ""))
-    st.dataframe([{"chunk_id": c["chunk_id"], "조항": c["article"] or "(서문)",
-                   "토큰": c["token_count"], "미리보기": (c["text"] or "")[:80].replace("\n", " ")}
-                  for c in chunks[:20]], use_container_width=True, hide_index=True)
-
-# ── 단계 3: 임베딩(Embedding) ──
-if chunks:
-    st.markdown("**3단계 · 임베딩(Embedding)** — 청크를 벡터로 변환합니다.")
-    if config.RAG_EMBED_PROVIDER == "openai":
-        model_label = f"OpenAI · {config.RAG_OPENAI_EMBED_MODEL}"
-    else:
-        model_label = f"오프라인 · {config.RAG_EMBED_MODEL}"
-    st.info(f"임베딩 모델: **{model_label}**  (`.env`의 `RAG_EMBED_PROVIDER`로 변경)")
-    no_key = config.RAG_EMBED_PROVIDER == "openai" and not config.OPENAI_API_KEY
-    if no_key:
-        st.warning("OpenAI 임베딩을 쓰려면 `.env`에 `OPENAI_API_KEY`를 넣으세요. "
-                   "(키 없이 쓰려면 `.env`에 `RAG_EMBED_PROVIDER=offline`)")
-    if st.button("🧮 임베딩 실행", disabled=no_key):
-        _reset_ref("ref_embeds", "ref_indexed")
-        try:
-            from cluster_screening.rag import index as ragidx
-            with st.spinner(f"임베딩 중… ({model_label})"):
-                st.session_state["ref_embeds"] = ragidx.embed([c["text"] for c in chunks])
-        except ModuleNotFoundError:
-            st.error("RAG 미설치: `uv sync --extra rag` 필요.")
-        except Exception as e:
-            st.error(f"임베딩 실패: {e}")
-
-embeds = st.session_state.get("ref_embeds")
-if embeds:
-    dim = len(embeds[0]) if embeds else 0
-    m1, m2 = st.columns(2)
-    m1.metric("벡터", f"{len(embeds)}개")
-    m2.metric("차원", f"{dim}")
-
-# ── 단계 4: 인덱싱(Vector DB) ──
-if embeds:
-    st.markdown("**4단계 · 인덱싱(Vector DB)** — 벡터를 로컬 Chroma에 저장해 검색을 준비합니다.")
-    if st.button("🗄️ 인덱싱 실행", type="primary"):
-        try:
-            from cluster_screening.rag import index as ragidx
-            with st.spinner("Chroma 인덱싱 중…"):
-                col = ragidx.get_collection(reset=True)
-                col.add(ids=[c["chunk_id"] for c in chunks],
-                        documents=[c["text"] for c in chunks],
-                        embeddings=embeds,
-                        metadatas=[{k: c[k] for k in _META} for c in chunks])
+        from cluster_screening.rag import chunking, ingestion
+        from cluster_screening.rag import index as ragidx
+        with st.status("기준 문서 처리 중…", expanded=True) as status:
+            st.write("📥 문서 적재·텍스트 추출…")
+            if do_proc:
+                refdir = tempfile.mkdtemp(prefix="ref_")
+                try:
+                    for f in ref_up:
+                        with open(os.path.join(refdir, f.name), "wb") as out:
+                            out.write(f.getbuffer())
+                    pages = ingestion.load_pages(refdir)
+                finally:
+                    shutil.rmtree(refdir, ignore_errors=True)
+            else:
+                pages = ingestion.load_pages()
+            st.write("✂️ 의미단위로 분할…")
+            chunks = chunking.chunk_pages(pages)
+            st.write(f"🧮 임베딩 생성…({len(chunks)}청크)")
+            embeds = ragidx.embed([c["text"] for c in chunks])
+            st.write("🗄️ 인덱싱(검색 준비)…")
+            col = ragidx.get_collection(reset=True)
+            col.add(ids=[c["chunk_id"] for c in chunks],
+                    documents=[c["text"] for c in chunks],
+                    embeddings=embeds,
+                    metadatas=[{k: c[k] for k in _META} for c in chunks])
             st.session_state["ref_indexed"] = {
                 "chunks": len(chunks), "sources": sorted({c["source"] for c in chunks})}
-        except Exception as e:
-            st.error(f"인덱싱 실패: {e}")
+            status.update(label=f"근거 문서 준비 완료 — {len(chunks)}청크", state="complete", expanded=False)
+    except ModuleNotFoundError:
+        st.error("RAG 미설치: `uv sync --extra rag` 필요.")
+    except Exception as e:
+        st.error(f"처리 실패: {e}")
 
 ref_idx = st.session_state.get("ref_indexed")
 if ref_idx:
@@ -188,7 +117,10 @@ if ref_idx:
         q = st.text_input("검색어", key="ref_q", placeholder="예: 국세·지방세 체납 기업 제외")
         if q:
             from cluster_screening.rag import retriever
-            for h in retriever.search(q, top_k=5):
+            hits = retriever.search(q, top_k=5)
+            if not hits:
+                st.info("근거 조항 없음 — 질의 키워드를 포함한 조항을 찾지 못했습니다.")
+            for h in hits:
                 loc = f'{h["source"]} p.{h["page"]}' + (f' · {h["article"]}' if h.get("article") else "")
                 with st.expander(f'[{h["score"]}] {loc}'):
                     st.write(h["text"][:500])
@@ -300,5 +232,15 @@ if res:
         st.dataframe(res["doc_log"], use_container_width=True)
 
     st.subheader("성과 년도별 정리")
-    st.caption("근거서류 제출 여부·건수는 자동, 연도별 금액·인원 정밀수치는 사람 확인")
+    st.caption("건수·고용인력(연번)은 자동 추출, 금액 등은 사람 최종 확인")
     st.dataframe(j["performance"], use_container_width=True)
+
+    fin = j.get("financials") or {}
+    if fin.get("items"):
+        st.subheader("재무 항목(연도별)")
+        src = (fin.get("file") or "") + (f" p.{fin['page']}" if fin.get("page") else "")
+        st.caption(f"제품매출·영업외손익·매출액·영업이익 — 출처: **{src or '재무제표'}** · 사람 최종 확인")
+        frows = [{"항목": item, "연도": yr, "값": val, "출처": src}
+                 for item, yv in fin["items"].items() for yr, val in (yv or {}).items()]
+        st.dataframe(frows or [{"항목": "(추출 없음)", "연도": "", "값": "", "출처": src}],
+                     use_container_width=True, hide_index=True)

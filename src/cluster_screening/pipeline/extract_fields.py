@@ -121,8 +121,9 @@ def detect_tax_arrears(text):
 
 
 # ── 유형별 추출 ──
-def extract_fields(doc_type, text):
+def extract_fields(doc_type, text, pages_text=None):
     f = {}
+    pt = pages_text or ([text] if text else [])   # 페이지별 텍스트(출처 페이지 표시용)
     if doc_type == "사업자등록증":
         f["사업자등록번호"] = extract_bizno(text)
         f["상호"] = extract_company_name(text)
@@ -144,6 +145,17 @@ def extract_fields(doc_type, text):
     elif doc_type in ("인감증명서", "재무제표_부가세과세표준증명원"):
         f["사업자등록번호"] = extract_bizno(text)
         f["상호"] = extract_company_name(text)
+        if doc_type == "재무제표_부가세과세표준증명원":
+            from . import extract_llm
+            fin, page = extract_llm.extract_financials(pt)   # 제품매출·영업외손익·매출액·영업이익(연도별)
+            if fin:
+                f["재무"] = fin
+                f["재무_page"] = page
+    elif doc_type in ("4대보험가입자명부", "고용보험자격취득자명부"):
+        from . import extract_llm
+        hc, page = extract_llm.extract_headcount(pt)   # 연번 최댓값
+        f["고용인력"] = hc
+        f["고용인력_page"] = page
     # 주주명부는 주주(투자조합 등)의 번호가 섞여 회사 식별필드를 추출하지 않음(존재만 신호)
     # 가점 증빙은 존재 자체를 신호로 사용
     return {k: v for k, v in f.items() if v is not None}

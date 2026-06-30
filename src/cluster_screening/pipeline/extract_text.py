@@ -7,6 +7,7 @@ config.USE_DOCLING=True 면 스캔본을 Docling(레이아웃·표 복원)+EasyO
 
 반환: {"text": str, "method": "text"|"ocr"|"docling"|"none", "pages": int, "ocr_used": bool}
 """
+import os
 import threading
 
 import pdfplumber
@@ -19,12 +20,12 @@ _DOCLING = None   # Docling DocumentConverter 싱글톤
 
 
 def _text_layer(pdf_path):
-    parts, n = [], 0
+    """반환: (페이지별 텍스트 리스트, 페이지수)."""
+    parts = []
     with pdfplumber.open(pdf_path) as pdf:
-        n = len(pdf.pages)
         for pg in pdf.pages:
             parts.append(pg.extract_text() or "")
-    return "\n".join(parts), n
+    return parts, len(parts)
 
 
 def _rasterize(pdf_path, dpi, max_pages=0):
@@ -67,6 +68,12 @@ def _get_easyocr():
         with _EASYOCR_LOCK:                 # 병렬 추출 시 중복 로드 방지(이중 검사)
             if _EASYOCR is None:
                 import easyocr
+                # torch 스레드 균형: 워커 N개가 코어를 나눠 쓰도록(1추론=전체코어 → 직렬화 방지)
+                try:
+                    import torch
+                    torch.set_num_threads(max(1, (os.cpu_count() or 4) // max(1, config.EXTRACT_WORKERS)))
+                except Exception:
+                    pass
                 kw = {"gpu": False, "verbose": False,
                       "download_enabled": config.OCR_DOWNLOAD_ENABLED}  # 폐쇄망: 0이면 다운로드 안 함
                 if config.OCR_MODEL_DIR:
@@ -82,7 +89,7 @@ def _ocr_easyocr(pdf_path):
     for img in _rasterize(pdf_path, config.OCR_DPI, config.OCR_MAX_PAGES):
         lines = reader.readtext(np.array(img), detail=0)  # 텍스트만(좌표 제외)
         out.append("\n".join(lines))
-    return "\n".join(out)
+    return out
 
 
 def _ocr_tesseract(pdf_path):
@@ -90,12 +97,41 @@ def _ocr_tesseract(pdf_path):
     out = []
     for img in _rasterize(pdf_path, config.OCR_DPI, config.OCR_MAX_PAGES):
         out.append(pytesseract.image_to_string(img, lang=config.OCR_LANG))
-    return "\n".join(out)
+    return out
+
+
+def _ocr_openai(pdf_path):
+    """OpenAI Vision으로 스캔 페이지 텍스트 추출(앞 OCR_MAX_PAGES 페이지). 페이지당 1회 호출."""
+    import base64
+    import io
+
+    from openai import OpenAI
+    if not config.OPENAI_API_KEY:
+        raise RuntimeError("OPENAI_API_KEY가 없어 Vision OCR을 쓸 수 없습니다(.env 확인).")
+    client = OpenAI(api_key=config.OPENAI_API_KEY)
+    prompt = "이 문서 이미지의 모든 텍스트(한국어·숫자·기호)를 원문 그대로 추출하라. 설명·요약 없이 텍스트만 출력."
+    out = []
+    for img in _rasterize(pdf_path, config.OCR_DPI, config.OCR_MAX_PAGES):
+        buf = io.BytesIO()
+        img.convert("RGB").save(buf, format="PNG")
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        resp = client.chat.completions.create(
+            model=config.OCR_VISION_MODEL, temperature=0,
+            messages=[{"role": "user", "content": [
+                {"type": "text", "text": prompt},
+                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64}"}},
+            ]}],
+        )
+        out.append(resp.choices[0].message.content or "")
+    return out
 
 
 def _ocr(pdf_path):
-    """EasyOCR 우선, 미설치 시 tesseract."""
-    if config.OCR_ENGINE == "easyocr":
+    """OCR 엔진 분기 → 페이지별 텍스트 리스트. openai(Vision, 기본) | easyocr | tesseract."""
+    eng = config.OCR_ENGINE
+    if eng == "openai":
+        return _ocr_openai(pdf_path)
+    if eng == "easyocr":
         try:
             return _ocr_easyocr(pdf_path)
         except ImportError:
@@ -129,10 +165,12 @@ def _extract_docling(pdf_path, n):
 
 
 def extract(pdf_path):
-    text, n = _text_layer(pdf_path)
+    """반환 dict: text, pages_text(페이지별 리스트), method, pages, ocr_used."""
+    parts, n = _text_layer(pdf_path)
+    text = "\n".join(parts)
     per_page = len(text.replace("\n", "")) / max(n, 1)
     if per_page >= config.TEXT_LAYER_MIN_CHARS:
-        return {"text": text, "method": "text", "pages": n, "ocr_used": False}
+        return {"text": text, "pages_text": parts, "method": "text", "pages": n, "ocr_used": False}
 
     # 스캔으로 판단 → Docling(선택) 또는 OCR
     if config.ENABLE_OCR and config.USE_DOCLING:
@@ -142,11 +180,13 @@ def extract(pdf_path):
             pass  # docling 실패 → 일반 OCR로 폴백
     if config.ENABLE_OCR:
         try:
-            otext = _ocr(pdf_path)
+            opages = _ocr(pdf_path)            # 페이지별 OCR 텍스트 리스트
+            otext = "\n".join(opages)
             if otext.strip():
-                return {"text": otext, "method": "ocr", "pages": n, "ocr_used": True}
+                return {"text": otext, "pages_text": opages, "method": "ocr",
+                        "pages": n, "ocr_used": True}
         except Exception as e:
-            return {"text": text, "method": "none", "pages": n, "ocr_used": False,
-                    "error": f"OCR 실패: {e}"}
-    return {"text": text, "method": "none", "pages": n, "ocr_used": False,
-            "note": "텍스트 레이어 없음(스캔) — OCR 미적용"}
+            return {"text": text, "pages_text": parts, "method": "none", "pages": n,
+                    "ocr_used": False, "error": f"OCR 실패: {e}"}
+    return {"text": text, "pages_text": parts, "method": "none", "pages": n,
+            "ocr_used": False, "note": "텍스트 레이어 없음(스캔) — OCR 미적용"}

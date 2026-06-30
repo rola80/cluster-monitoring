@@ -458,7 +458,6 @@ name = "cluster-screening"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "easyocr" },
     { name = "openai" },
     { name = "openpyxl" },
     { name = "pandas" },
@@ -466,7 +465,6 @@ dependencies = [
     { name = "pdfplumber" },
     { name = "pillow" },
     { name = "pymupdf" },
-    { name = "pytesseract" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
     { name = "pyzipper" },
@@ -477,6 +475,10 @@ dependencies = [
 [package.optional-dependencies]
 docling = [
     { name = "docling" },
+]
+ocr-local = [
+    { name = "easyocr" },
+    { name = "pytesseract" },
 ]
 rag = [
     { name = "chromadb" },
@@ -498,7 +500,7 @@ dev = [
 requires-dist = [
     { name = "chromadb", marker = "extra == 'rag'", specifier = ">=0.5" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.105" },
-    { name = "easyocr", specifier = ">=1.7" },
+    { name = "easyocr", marker = "extra == 'ocr-local'", specifier = ">=1.7" },
     { name = "openai", specifier = ">=1.40" },
     { name = "openpyxl", specifier = ">=3.1" },
     { name = "pandas", specifier = ">=2.0" },
@@ -507,7 +509,7 @@ requires-dist = [
     { name = "pillow", specifier = ">=10.0" },
     { name = "pyhwp", marker = "extra == 'rag'", specifier = ">=0.1b15" },
     { name = "pymupdf", specifier = ">=1.24" },
-    { name = "pytesseract", specifier = ">=0.3.10" },
+    { name = "pytesseract", marker = "extra == 'ocr-local'", specifier = ">=0.3.10" },
     { name = "python-dotenv", specifier = ">=1.0" },
     { name = "pyyaml", specifier = ">=6.0" },
     { name = "pyzipper", specifier = ">=0.3.6" },
@@ -517,7 +519,7 @@ requires-dist = [
     { name = "unstructured", extras = ["pdf"], marker = "extra == 'unstructured'", specifier = ">=0.15" },
     { name = "unstructured-inference", marker = "extra == 'unstructured'", specifier = ">=0.8" },
 ]
-provides-extras = ["docling", "rag", "unstructured"]
+provides-extras = ["ocr-local", "docling", "rag", "unstructured"]
 
 [package.metadata.requires-dev]
 dev = [

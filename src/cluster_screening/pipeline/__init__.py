@@ -2,6 +2,7 @@
 import os
 import shutil
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import yaml
@@ -12,8 +13,8 @@ from . import classify, extract_cache, extract_fields, ingest
 _RULES = None
 
 # 필드 추출이 필요 없는(완비성 '존재'만 확인하는) 유형 — 파일명으로 식별되면 OCR 생략(속도)
-NO_FIELD_TYPES = {"사업계획서", "주주명부", "개인정보수집이용동의서",
-                  "4대보험가입자명부", "고용보험자격취득자명부"}
+# (4대보험·고용보험 명부는 고용인력=연번 추출이 필요하므로 제외하지 않음)
+NO_FIELD_TYPES = {"사업계획서", "주주명부", "개인정보수집이용동의서"}
 
 
 def cleanup(record):
@@ -38,12 +39,13 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
     workdir = workdir or tempfile.mkdtemp(prefix="cluster_")
     pdfs = ingest.extract_all(src_path, workdir=workdir, pw=pw)
     n = len(pdfs)
+    t_all = time.perf_counter()
 
     def log(done, msg):
         if progress:
             progress(done, n, msg)
 
-    log(0, f"압축 해제 완료 — PDF {n}개")
+    log(0, f"압축 해제 완료 — PDF {n}개 (워커 {config.EXTRACT_WORKERS})")
 
     # 1) 파일명 1차 분류 → 필드 불필요 유형은 OCR 생략, 나머지만 추출 대상
     plan = [(p, classify.classify(p, "")[0]) for p in pdfs]
@@ -54,23 +56,30 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
     done = 0
     workers = max(1, config.EXTRACT_WORKERS)
 
-    def _record(p, ext):
+    def _extract_timed(p):
+        t0 = time.perf_counter()
+        ext = extract_cache.extract(p)
+        return ext, round(time.perf_counter() - t0, 2)
+
+    def _record(p, ext, secs):
         nonlocal done
         done += 1
         tag = "캐시" if ext.get("cached") else ext.get("method", "")
-        log(done, f"[{done}/{n}] {os.path.basename(p)} · {tag} · {len(ext.get('text') or '')}자")
+        log(done, f"[{done}/{n}] {os.path.basename(p)} · {tag} · {len(ext.get('text') or '')}자 · {secs}s")
 
     if workers > 1 and len(need) > 1:
         with ThreadPoolExecutor(max_workers=workers) as ex:
-            futs = {ex.submit(extract_cache.extract, p): p for p in need}
+            futs = {ex.submit(_extract_timed, p): p for p in need}
             for fut in as_completed(futs):
                 p = futs[fut]
-                extracted[p] = fut.result()
-                _record(p, extracted[p])
+                ext, secs = fut.result()
+                extracted[p] = ext
+                _record(p, ext, secs)
     else:
         for p in need:
-            extracted[p] = extract_cache.extract(p)
-            _record(p, extracted[p])
+            ext, secs = _extract_timed(p)
+            extracted[p] = ext
+            _record(p, ext, secs)
 
     # 3) 조립(원래 순서) — 분류·필드추출
     docs, doc_log = {}, []
@@ -83,7 +92,8 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
         else:
             ext = extracted[p]
             typ, conf = classify.classify(p, ext["text"])
-            fields = extract_fields.extract_fields(typ, ext["text"]) if typ != "미분류" else {}
+            fields = (extract_fields.extract_fields(typ, ext["text"], ext.get("pages_text"))
+                      if typ != "미분류" else {})
         nchars = len(ext.get("text") or "")
         # 불러옴: 추출 성공(text/ocr) 또는 파일명 생략(존재 확인). method 'none'·0자면 실패→사람 확인
         loaded = ext["method"] == "filename" or (ext["method"] != "none" and nchars > 0)
@@ -95,7 +105,7 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
                         "추출방식": ext["method"], "글자수": nchars, "필드수": len(fields),
                         "불러옴": "O" if loaded else "X"})
 
-    log(n, "분석 완료 — 판정 중…")
+    log(n, f"분석 완료 — 총 {round(time.perf_counter() - t_all, 1)}s · 판정 중…")
     if apply_date is None:  # 신청일: 인자 우선, 없으면 입주신청서에서
         apply_date = docs.get("입주신청서", {}).get("fields", {}).get("신청일")
     record = {"docs": docs, "apply_date": apply_date, "doc_log": doc_log,
