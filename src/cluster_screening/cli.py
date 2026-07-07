@@ -5,7 +5,7 @@ import argparse
 from datetime import datetime
 
 from . import pipeline
-from .pipeline import report, rules_engine
+from .pipeline import masking, report, rules_engine
 
 
 def main():
@@ -22,6 +22,7 @@ def main():
                                              progress=lambda done, n, msg: print("  " + msg))
     try:
         judgment = rules_engine.evaluate(record, rules)
+        judgment = masking.mask_judgment(judgment, record)   # PII 마스킹(출력용)
 
         print(f"\n=== {a.name} 종합판정: {judgment['overall']} "
               f"(가점 잠정 {judgment['bonus_total']}점) ===")

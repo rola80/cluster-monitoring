@@ -11,7 +11,7 @@ from datetime import date
 import streamlit as st
 
 from cluster_screening import PROJECT_ROOT, config, pipeline
-from cluster_screening.pipeline import report, rules_engine
+from cluster_screening.pipeline import masking, report, rules_engine
 
 st.set_page_config(page_title="환경기업지원사업 제출서류검토기", layout="wide")
 
@@ -170,6 +170,7 @@ if st.button("검토 실행", type="primary", disabled=not up or (need_pw and no
         record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw,
                                                  progress=prog, workdir=work)
         judgment = rules_engine.evaluate(record, rules)
+        judgment = masking.mask_judgment(judgment, record)   # PII 마스킹(출력용)
         bar.empty()
         logbox.empty()
 

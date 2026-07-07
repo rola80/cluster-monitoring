@@ -68,3 +68,6 @@ RAG_TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 RAG_MIN_SCORE = float(os.getenv("RAG_MIN_SCORE", "0.3"))  # 이 미만 유사도면 근거조항 미첨부(노이즈 방지)
 # 판정 evidence에 근거 조항(RAG)을 첨부. rag 미설치/인덱스 없음이면 자동 무첨부(우아한 degradation).
 ENABLE_RAG_BASIS = os.getenv("ENABLE_RAG_BASIS", "1") == "1"
+
+# ── 개인정보(PII) 마스킹 ── 판정 결과·리포트 출력에서 주민/법인등록번호·성명(대표자)을 가린다.
+ENABLE_PII_MASKING = os.getenv("ENABLE_PII_MASKING", "1") == "1"
