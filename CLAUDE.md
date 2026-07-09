@@ -98,9 +98,19 @@ zip 비밀번호는 `.env`(`ZIP_PASSWORD`) 또는 `--pw`로만 전달(코드/문
 ### (B) 신청 서류 검토 파이프라인 — `src/cluster_screening/pipeline/`  ✅ 구현됨
 ```
 수집(ingest) → 분류(classify) → 텍스트추출(extract_text) → 필드추출(extract_fields)
-            → 룰판정(rules_engine) → 리포트(report)
+            → 룰판정(rules_engine) → [출력 PII 마스킹 masking] → 리포트(report)
 ```
 오케스트레이터는 `pipeline/__init__.py`의 `process_company()`. `app.py`(UI)·`cli.py`는 얇은 진입점.
+
+**개인정보(PII) 마스킹 — 하이브리드(`pipeline/masking.py`).** 외부 AI엔 마스킹본·최소정보만 전달한다.
+- **분석(외부 전송) 전 마스킹+검증**: 재무제표·명부 등을 OpenAI로 보내기 직전 `masking.scrub_outbound`가
+  주민·법인번호·전화·이메일을 마스킹하고 **잔여 PII 0건인지 검증**해 감사 로그(`cluster_screening.pii`)를 남긴다.
+  판정에 필요한 숫자(매출·연번)는 보존. `extract_llm`이 이 관문을 통과한 텍스트만 전송.
+- **이미지·스캔 문서는 외부 전송 보류**: 외부 OCR 엔진(openai) 사용 시 스캔은 마스킹이 어려우므로
+  `extract_text`가 `method="scan"`으로 보류(외부 미전송)하고 '사람이 직접 확인'으로 표시. `config.AUTO_EXTERNAL_OCR=1`로 옵트인.
+- **출력 마스킹**: `masking.mask_judgment`가 결과·리포트의 성명(`홍○○`)·주민/법인번호(앞 6자리)를 가린다.
+  식별정보(사업자번호·대표자·상호)는 원본으로 판정 후 출력에서만 마스킹. `ENABLE_PII_MASKING`으로 토글.
+- 마스킹 감사기록(`masking.reset_audit`/`get_audit`)은 UI에 "개인정보 마스킹 실시 완료" 배너로 표시.
 
 ### 두 갈래가 만나는 지점  🟡 1차 통합됨
 `rules_engine.evaluate()`가 각 criterion의 `basis` 질의로 `retriever.evidence_for()`를 호출해
@@ -158,6 +168,7 @@ ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra un
 
 - **전부 PDF지만 전자문서(텍스트 레이어)와 스캔 이미지가 혼재** → 하이브리드 추출.
   먼저 텍스트 레이어를 시도하고, 페이지당 `config.TEXT_LAYER_MIN_CHARS`(40) 미만이면 OCR로 폴백.
+  단, **외부 OCR 엔진(openai) 사용 시 스캔은 개인정보 보호 정책상 외부 전송 보류**(`method="scan"`, 사람 확인).
   스캔본 예: 입주신청서·개인정보동의서·납세증명서·(일부) 법인등기부·인감증명서.
 - **중첩 zip + 비밀번호** → zip 안에 zip 가능. 비밀번호는 `.env`/인자로 받고 코드 하드코딩 금지.
   압축 해제 시 `os.path.basename`으로 경로를 떼어내 zip-slip(경로 탈출)을 차단한다.
@@ -192,7 +203,9 @@ ingestion 파서는 pdfplumber 기본, `USE_UNSTRUCTURED=1`(+`uv sync --extra un
 - `.gitignore`에 `.env`·벡터 DB 폴더(예: `chroma/`)·`data/`·`outputs/`·`__pycache__` 포함.
   **키가 노출되면 즉시 폐기·재발급**한다.
 - 단독 사용 도구라 앱 로그인은 없음. 접근 제어가 필요하면 외부(리버스 프록시·OS 권한 등)에서 처리.
-- 신청 기업 서류에는 개인정보·민감정보가 있다. 처리 후 임시폴더는 `pipeline.cleanup`으로 삭제. 리포트에 불필요하게 원문을 남기지 않는다(PII 마스킹 예정).
+- 신청 기업 서류에는 개인정보·민감정보가 있다. 처리 후 임시폴더는 `pipeline.cleanup`으로 삭제. 리포트에 불필요하게 원문을 남기지 않는다.
+- **PII 마스킹 구현됨(하이브리드, `pipeline/masking.py`)**: 외부 AI 전송 전 마스킹+검증(`scrub_outbound`),
+  마스킹이 어려운 이미지·스캔은 외부 전송 보류(사람 확인), 결과·리포트는 출력 마스킹(→ §5 (B) 참고).
 
 ---
 
