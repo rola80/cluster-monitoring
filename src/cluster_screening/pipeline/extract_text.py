@@ -5,7 +5,11 @@ OCR 엔진(우선순위):
   2) tesseract — EasyOCR 미설치 시 폴백(config.OCR_LANG, 'kor' 언어팩 필요).
 config.USE_DOCLING=True 면 스캔본을 Docling(레이아웃·표 복원)+EasyOCR로 처리(느리고 RAM 큼; 표 정밀추출용).
 
-반환: {"text": str, "method": "text"|"ocr"|"docling"|"none", "pages": int, "ocr_used": bool}
+[개인정보 보호 정책] 외부 AI(Vision) OCR 엔진 사용 시, 스캔·이미지 문서는 마스킹이 어려우므로
+자동 전송하지 않고 method="scan"으로 '보류'한다(원본 이미지가 외부로 나가지 않음 → 사람이 직접 확인).
+config.AUTO_EXTERNAL_OCR=1로 켜면 종전처럼 외부 Vision OCR로 판독한다. 로컬 OCR은 정책과 무관.
+
+반환: {"text": str, "method": "text"|"ocr"|"docling"|"scan"|"none", "pages": int, "ocr_used": bool}
 """
 import os
 import threading
@@ -172,7 +176,16 @@ def extract(pdf_path):
     if per_page >= config.TEXT_LAYER_MIN_CHARS:
         return {"text": text, "pages_text": parts, "method": "text", "pages": n, "ocr_used": False}
 
-    # 스캔으로 판단 → Docling(선택) 또는 OCR
+    # [개인정보 보호 정책] 스캔·이미지 문서는 마스킹이 어렵다.
+    # 외부 AI(Vision)로 보내는 OCR 엔진이면서 자동 전송이 허용되지 않았으면 → 외부로 보내지 않고
+    # '사람이 직접 확인' 대상으로 보류한다(원본 이미지가 외부로 나가지 않음).
+    external = config.OCR_ENGINE in config.EXTERNAL_OCR_ENGINES
+    if config.ENABLE_OCR and external and not config.AUTO_EXTERNAL_OCR:
+        return {"text": "", "pages_text": [], "method": "scan", "pages": n,
+                "ocr_used": False,
+                "note": "스캔·이미지 문서 — 외부 AI 전송 보류(개인정보 보호), 사람이 직접 확인 필요"}
+
+    # 스캔으로 판단 → Docling(선택) 또는 (로컬/허용) OCR
     if config.ENABLE_OCR and config.USE_DOCLING:
         try:
             return _extract_docling(pdf_path, n)

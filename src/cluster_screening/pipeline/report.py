@@ -91,14 +91,17 @@ def build_report(company_name, record, judgment, out_path):
         for col, w in zip("ABCD", [18, 12, 18, 28]):
             wsf.column_dimensions[col].width = w
 
-    # 5) 서류 처리 로그
+    # 5) 서류 처리 로그 ('직접확인'이 채워진 파일은 이미지·스캔이라 외부 AI 전송 보류 → 사람 확인)
     ws4 = wb.create_sheet("서류 처리내역")
-    ws4.append(["파일", "분류 유형", "신뢰도", "추출방식", "글자수", "필드수", "불러옴"])
+    ws4.append(["파일", "분류 유형", "신뢰도", "추출방식", "글자수", "필드수", "불러옴", "직접확인 사유"])
     for d in record.get("doc_log", []):
         ws4.append([d["file"], d["유형"], d["신뢰도"], d["추출방식"],
-                    d.get("글자수", 0), d["필드수"], d.get("불러옴", "")])
-    _style(ws4, 7)
-    for col, w in zip("ABCDEFG", [40, 22, 8, 10, 8, 8, 8]):
+                    d.get("글자수", 0), d["필드수"], d.get("불러옴", ""), d.get("직접확인", "")])
+    _style(ws4, 8)
+    for r in range(2, ws4.max_row + 1):     # 직접확인 대상은 노란색(확인필요)으로 강조
+        if ws4.cell(r, 8).value:
+            ws4.cell(r, 8).fill = PatternFill("solid", fgColor=COLORS["확인필요"])
+    for col, w in zip("ABCDEFGH", [40, 22, 8, 10, 8, 8, 8, 24]):
         ws4.column_dimensions[col].width = w
 
     wb.save(out_path)

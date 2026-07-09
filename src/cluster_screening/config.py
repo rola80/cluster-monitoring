@@ -18,6 +18,14 @@ except ImportError:
 ENABLE_OCR = os.getenv("ENABLE_OCR", "1") == "1"
 OCR_ENGINE = os.getenv("OCR_ENGINE", "openai")           # openai(Vision, 기본) | easyocr | tesseract
 OCR_VISION_MODEL = os.getenv("OCR_VISION_MODEL", "gpt-4o-mini")  # OpenAI Vision OCR 모델
+
+# 외부 AI로 이미지를 보내는 OCR 엔진(마스킹 불가 → 개인정보 노출 위험)
+EXTERNAL_OCR_ENGINES = {"openai"}
+# [개인정보 보호 정책] 이미지·스캔 문서는 마스킹이 어려우므로 외부 AI(Vision)로 '자동 전송하지 않는다'.
+# 기본 0(보류): 스캔 문서는 OCR하지 않고 '사람이 직접 확인' 대상으로 표시(외부 전송 없음).
+# 1로 켜면 종전처럼 외부 Vision OCR로 자동 판독(원본 이미지가 외부로 전송됨).
+# ※ 로컬 OCR(easyocr/tesseract)은 외부 전송이 아니므로 이 설정과 무관하게 동작.
+AUTO_EXTERNAL_OCR = os.getenv("AUTO_EXTERNAL_OCR", "0") == "1"
 OCR_LANGS = os.getenv("OCR_LANGS", "ko,en").split(",")   # EasyOCR 언어코드(쉼표구분, easyocr 모드)
 OCR_LANG = os.getenv("OCR_LANG", "kor+eng")              # tesseract 폴백용(kor 언어팩 필요)
 OCR_DPI = int(os.getenv("OCR_DPI", "200"))            # 속도/정확도 절충(300→200). 필요 시 상향

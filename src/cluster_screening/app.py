@@ -6,21 +6,21 @@ import os
 import shutil
 import tempfile
 import zipfile
-from datetime import date
 
 import streamlit as st
 
 from cluster_screening import PROJECT_ROOT, config, pipeline
 from cluster_screening.pipeline import masking, report, rules_engine
 
-st.set_page_config(page_title="환경기업지원사업 제출서류검토기", layout="wide")
+st.set_page_config(page_title="녹색융합클러스터 입주기업 신청서류 적합성 검토 및 성과 정리 자동화",
+                   layout="wide")
 
 # 제목 옆 KEITI 로고(파일 있으면 표시). assets/keiti_logo.png 에 로고를 두세요(또는 LOGO_PATH 환경변수).
 _logo = os.getenv("LOGO_PATH", os.path.join(PROJECT_ROOT, "assets", "keiti_logo.png"))
 _lc1, _lc2 = st.columns([1, 7], vertical_alignment="center")
 if os.path.exists(_logo):
     _lc1.image(_logo)
-_lc2.title("환경기업지원사업 제출서류검토기")
+_lc2.title("녹색융합클러스터 입주기업 신청서류 적합성 검토 및 성과 정리 자동화")
 
 XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 _META = ("source", "page", "parser_type", "token_count", "warning", "article")
@@ -131,12 +131,7 @@ st.divider()
 st.header("② 회사 구비서류 검토")
 if not ref_idx:
     st.caption("※ 위 ①에서 기준 문서 인덱싱을 마치면 판정에 근거 조항이 붙습니다. (없어도 룰 판정은 가능)")
-
-cc1, cc2 = st.columns(2)
-with cc1:
-    company = st.text_input("기업명", "")
-with cc2:
-    apply_d = st.date_input("입주신청일", value=date.today())
+st.caption("기업명·입주신청일은 제출 서류(입주신청서·사업자등록증)에서 자동으로 추출합니다.")
 
 up = st.file_uploader("회사 구비서류 (zip 또는 PDF 다중)", type=["zip", "pdf"],
                       accept_multiple_files=True, key="company_up")
@@ -167,21 +162,26 @@ if st.button("검토 실행", type="primary", disabled=not up or (need_pw and no
             bar.progress(min(done / max(n, 1), 1.0), msg)
             logbox.code("\n".join(logs[-12:]))   # 단계별 라이브 로그
 
-        record, rules = pipeline.process_company(src, apply_date=apply_d, pw=pw,
+        # 입주신청일은 인자로 주지 않는다 → process_company가 입주신청서에서 자동 추출
+        record, rules = pipeline.process_company(src, apply_date=None, pw=pw,
                                                  progress=prog, workdir=work)
         judgment = rules_engine.evaluate(record, rules)
         judgment = masking.mask_judgment(judgment, record)   # PII 마스킹(출력용)
+        pii_audit = masking.get_audit()   # 외부 전송 전 + 출력 단계 마스킹 감사 기록(화면 표시용)
         bar.empty()
         logbox.empty()
 
-        name = company or "기업"
+        # 기업명: 추출된 상호에서 자동 설정(없으면 '기업'). 상호는 식별정보라 원본 유지
+        name = next((d["fields"].get("상호") for d in record["docs"].values()
+                     if d.get("fields", {}).get("상호")), None) or "기업"
         out_path = os.path.join(work, f"판정결과_{name}.xlsx")
-        report.build_report(company or "(미지정)", record, judgment, out_path)
+        report.build_report(name, record, judgment, out_path)
         with open(out_path, "rb") as fp:
             report_bytes = fp.read()
         st.session_state["result"] = {
             "name": name, "judgment": judgment, "logs": logs,
             "doc_log": record["doc_log"], "report_bytes": report_bytes,
+            "pii_audit": pii_audit,
         }
     except RuntimeError as e:
         st.error(f"처리 실패: {e}  — 압축 비밀번호를 확인하세요.")
@@ -205,15 +205,41 @@ if res:
     st.download_button("판정 리포트(xlsx) 다운로드", res["report_bytes"],
                        file_name=f"판정결과_{res['name']}.xlsx", mime=XLSX_MIME)
 
-    # 불러오기 상태 — 텍스트 추출 실패/미분류 파일을 사람이 확인하도록 알림
-    fail = [d["file"] for d in res["doc_log"] if d.get("불러옴") == "X"]
+    # 🔒 개인정보 마스킹 실시 결과 — 외부 AI 전송 전/결과 출력 단계 마스킹 완료 알림
+    audit = res.get("pii_audit") or []
+    total_masked = sum(a.get("마스킹건수", 0) for a in audit)
+    residual = sum(a.get("잔여", 0) for a in audit)
+    inactive = any(a.get("상태") == "비활성" for a in audit)
+    if inactive:
+        st.warning("🔓 개인정보 마스킹이 **비활성**(ENABLE_PII_MASKING=0)입니다 — 마스킹 없이 처리됨.")
+    elif residual:
+        st.error(f"🔒 개인정보 마스킹 후에도 **잔여 {residual}건** 감지 — 사람 확인 필요.")
+    else:
+        st.success(f"🔒 개인정보 마스킹 실시 완료 — 외부 AI 전송 전·결과 출력 단계에서 "
+                   f"총 **{total_masked}건** 마스킹, 잔여 0건.")
+    if audit:
+        with st.expander("🔎 개인정보 마스킹 검증 상세(단계별)"):
+            st.caption("외부 AI(OpenAI)로는 마스킹·검증을 통과한 텍스트만 전달됩니다. "
+                       "이미지·스캔 문서는 전송하지 않고 사람이 직접 확인합니다.")
+            st.dataframe(audit, use_container_width=True, hide_index=True)
+
+    # 불러오기 상태 — 텍스트 추출 실패/미분류/직접확인 대상 파일을 사람이 확인하도록 알림
+    # scan(외부전송 보류)은 실패가 아니라 정책상 보류이므로 fail에서 제외하고 '직접확인'으로 안내
+    fail = [d["file"] for d in res["doc_log"]
+            if d.get("불러옴") == "X" and d.get("추출방식") != "scan"]
     uncls = [d["file"] for d in res["doc_log"] if d["유형"] == "미분류"]
+    review = [(d["file"], d["직접확인"]) for d in res["doc_log"] if d.get("직접확인")]
     if fail:
         st.error("⚠ 텍스트를 불러오지 못한 파일 — **사람이 직접 확인 필요**:\n\n- " + "\n- ".join(fail))
+    if review:
+        st.warning("🖼 **이미지 기반 문서는 개인정보 포함 가능성이 있어 외부 AI로 전송하지 않고 보류했습니다 "
+                   "— 사람이 먼저 직접 확인 필요**"
+                   "(마스킹이 어려운 이미지·스캔 문서는 자동 판독하지 않습니다):\n\n- "
+                   + "\n- ".join(f"{f} · {why}" for f, why in review))
     if uncls:
         st.warning("❓ 유형이 분류되지 않은 파일(확인 권장):\n\n- " + "\n- ".join(uncls))
-    if not fail and not uncls:
-        st.caption("✅ 업로드한 모든 파일을 불러와 분류했습니다.")
+    if not fail and not uncls and not review:
+        st.caption("✅ 업로드한 모든 파일을 텍스트 레이어로 불러와 분류했습니다.")
     if res.get("logs"):
         with st.expander("🧾 처리 로그(단계별)"):
             st.code("\n".join(res["logs"]))

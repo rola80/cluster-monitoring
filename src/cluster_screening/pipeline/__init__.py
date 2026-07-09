@@ -8,13 +8,22 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import yaml
 
 from .. import config
-from . import classify, extract_cache, extract_fields, ingest
+from . import classify, extract_cache, extract_fields, ingest, masking
 
 _RULES = None
 
 # 필드 추출이 필요 없는(완비성 '존재'만 확인하는) 유형 — 파일명으로 식별되면 OCR 생략(속도)
 # (4대보험·고용보험 명부는 고용인력=연번 추출이 필요하므로 제외하지 않음)
 NO_FIELD_TYPES = {"사업계획서", "주주명부", "개인정보수집이용동의서"}
+
+# 사람이 직접 확인해야 하는 추출방식(사유):
+#  - scan: 스캔·이미지 문서를 외부 AI 전송 보류(개인정보 보호) → 원본을 사람이 직접 확인
+#  - ocr/docling: 로컬 OCR로 판독했으나 오독 가능 → 원본과 대조 확인
+REVIEW_REASONS = {
+    "scan": "개인정보 포함 가능성 — 외부 AI 전송 보류, 직접 확인 필요",
+    "ocr": "OCR 판독(오독 가능) — 원본 대조 확인 필요",
+    "docling": "OCR 판독(오독 가능) — 원본 대조 확인 필요",
+}
 
 
 def cleanup(record):
@@ -36,6 +45,7 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
     """src_path: zip/폴더/PDF. 반환: record(분류·추출 결과 포함, 임시경로는 record['_workdir']).
     추출은 내용해시 캐시 + 파일 단위 병렬. progress(done, total, message)로 단계별 로그를 흘린다."""
     rules = _RULES or load_rules()
+    masking.reset_audit()   # 이번 실행의 PII 마스킹 감사 기록 초기화(외부 전송 전 검증 로그 수집)
     workdir = workdir or tempfile.mkdtemp(prefix="cluster_")
     pdfs = ingest.extract_all(src_path, workdir=workdir, pw=pw)
     n = len(pdfs)
@@ -95,15 +105,19 @@ def process_company(src_path, apply_date=None, pw="", progress=None, workdir=Non
             fields = (extract_fields.extract_fields(typ, ext["text"], ext.get("pages_text"))
                       if typ != "미분류" else {})
         nchars = len(ext.get("text") or "")
-        # 불러옴: 추출 성공(text/ocr) 또는 파일명 생략(존재 확인). method 'none'·0자면 실패→사람 확인
-        loaded = ext["method"] == "filename" or (ext["method"] != "none" and nchars > 0)
-        entry = {"present": True, "file": os.path.basename(p), "method": ext["method"],
+        method = ext["method"]
+        # 불러옴: 추출 성공(text/ocr) 또는 파일명 생략(존재 확인).
+        #  method 'none'=실패, 'scan'=정책상 외부전송 보류 → 둘 다 X(사람 확인 대상)
+        loaded = method == "filename" or (method not in ("none", "scan") and nchars > 0)
+        entry = {"present": True, "file": os.path.basename(p), "method": method,
                  "confidence": conf, "fields": fields, "pages": ext.get("pages")}
         if typ not in docs or len(fields) > len(docs[typ].get("fields", {})):  # 중복 시 필드 많은 것
             docs[typ] = entry
         doc_log.append({"file": entry["file"], "유형": typ, "신뢰도": conf,
-                        "추출방식": ext["method"], "글자수": nchars, "필드수": len(fields),
-                        "불러옴": "O" if loaded else "X"})
+                        "추출방식": method, "글자수": nchars, "필드수": len(fields),
+                        "불러옴": "O" if loaded else "X",
+                        # 스캔·이미지/OCR 판독 등 사람이 직접 확인해야 하는 사유(없으면 빈 값)
+                        "직접확인": REVIEW_REASONS.get(method, "")})
 
     log(n, f"분석 완료 — 총 {round(time.perf_counter() - t_all, 1)}s · 판정 중…")
     if apply_date is None:  # 신청일: 인자 우선, 없으면 입주신청서에서
